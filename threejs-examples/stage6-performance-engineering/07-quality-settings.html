@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>07 - 质量设置 / Quality Settings</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a1a; }
+        canvas { display: block; }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            min-width: 340px;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+            z-index: 100;
+        }
+        #info-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            color: #4fc3f7;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1px 0;
+        }
+        .metric-label { color: #aaa; }
+        .metric-value { color: #4fc3f7; font-weight: bold; }
+        .good { color: #4caf50; }
+        .warning { color: #ff9800; }
+        .bad { color: #f44336; }
+        .section-title {
+            color: #ff9800;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            font-size: 11px;
+            border-top: 1px solid #444;
+            padding-top: 6px;
+        }
+        .btn-group { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+        .btn {
+            padding: 6px 12px;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .btn.active { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.3); }
+        .btn-low { background: #4caf50; color: #fff; }
+        .btn-medium { background: #ff9800; color: #fff; }
+        .btn-high { background: #f44336; color: #fff; }
+        .btn-adaptive { background: #9c27b0; color: #fff; }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px 8px;
+            margin-top: 4px;
+        }
+        .setting-item {
+            font-size: 11px;
+            padding: 1px 0;
+        }
+        .setting-on { color: #4caf50; }
+        .setting-off { color: #666; }
+        #fps-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 20px;
+            font-weight: bold;
+            color: #4caf50;
+            z-index: 100;
+        }
+        #fps-display small { font-size: 11px; color: #aaa; display: block; }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h2>质量设置 / Quality Settings</h2>
+        <div class="metric-row">
+            <span class="metric-label">Current Preset:</span>
+            <span class="metric-value" id="current-preset">Medium</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">FPS:</span>
+            <span class="metric-value" id="fps-value">--</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Draw Calls:</span>
+            <span class="metric-value" id="draw-calls">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Triangles:</span>
+            <span class="metric-value" id="triangles">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Particles:</span>
+            <span class="metric-value" id="particle-count">0</span>
+        </div>
+
+        <div class="section-title">Active Settings / 当前设置</div>
+        <div class="settings-grid">
+            <div class="setting-item" id="s-shadows">Shadows: --</div>
+            <div class="setting-item" id="s-bloom">Bloom: --</div>
+            <div class="setting-item" id="s-aa">AA: --</div>
+            <div class="setting-item" id="s-dpr">DPR: --</div>
+            <div class="setting-item" id="s-shadowmap">ShadowMap: --</div>
+            <div class="setting-item" id="s-particles">Particles: --</div>
+        </div>
+
+        <div class="section-title">Quality Presets / 质量预设</div>
+        <div class="btn-group">
+            <button class="btn btn-low" id="btn-low">Low</button>
+            <button class="btn btn-medium active" id="btn-medium">Medium</button>
+            <button class="btn btn-high" id="btn-high">High</button>
+        </div>
+
+        <div class="section-title">Adaptive Quality / 自适应质量</div>
+        <div class="btn-group">
+            <button class="btn btn-adaptive" id="btn-adaptive">Enable Auto-Quality</button>
+        </div>
+        <div class="metric-row" style="margin-top: 4px;">
+            <span class="metric-label">Auto-Quality:</span>
+            <span class="metric-value" id="adaptive-status">OFF</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Target FPS:</span>
+            <span class="metric-value">55</span>
+        </div>
+    </div>
+
+    <div id="fps-display">
+        <span id="fps-big">--</span>
+        <small>FPS</small>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // ============================================
+        // 质量预设定义 / Quality Preset Definitions
+        // ============================================
+
+        const QUALITY_PRESETS = {
+            low: {
+                label: 'Low (低)',
+                shadows: false,
+                shadowMapSize: 512,
+                bloom: false,
+                bloomStrength: 0,
+                antialias: false,
+                dpr: 1,
+                particleCount: 2000,
+                objectDetail: 8
+            },
+            medium: {
+                label: 'Medium (中)',
+                shadows: true,
+                shadowMapSize: 1024,
+                bloom: false,
+                bloomStrength: 0,
+                antialias: true,
+                dpr: Math.min(window.devicePixelRatio, 1.5),
+                particleCount: 8000,
+                objectDetail: 16
+            },
+            high: {
+                label: 'High (高)',
+                shadows: true,
+                shadowMapSize: 2048,
+                bloom: true,
+                bloomStrength: 0.6,
+                antialias: true,
+                dpr: Math.min(window.devicePixelRatio, 2),
+                particleCount: 25000,
+                objectDetail: 32
+            }
+        };
+
+        let currentPreset = 'medium';
+        let adaptiveEnabled = false;
+        let adaptiveTimer = null;
+
+        // ============================================
+        // 场景初始化 / Scene Initialization
+        // ============================================
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(20, 15, 20);
+
+        // 渲染器 (AA 在 Medium/High 启用) / Renderer (AA enabled for Medium/High)
+        const renderer = new THREE.WebGLRenderer({
+            antialias: QUALITY_PRESETS.medium.antialias
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(QUALITY_PRESETS.medium.dpr);
+        renderer.shadowMap.enabled = QUALITY_PRESETS.medium.shadows;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // ============================================
+        // 后期处理 / Post-Processing
+        // ============================================
+
+        const composer = new EffectComposer(renderer);
+        const renderPass = new RenderPass(scene, camera);
+        composer.addPass(renderPass);
+
+        // Bloom 通道 / Bloom pass
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0, // strength (初始为0 / initially 0)
+            0.4, // radius
+            0.85 // threshold
+        );
+        composer.addPass(bloomPass);
+        let useBloom = false;
+
+        // ============================================
+        // 灯光 / Lighting
+        // ============================================
+
+        const ambientLight = new THREE.AmbientLight(0x202040, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        dirLight.position.set(15, 25, 15);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = QUALITY_PRESETS.medium.shadowMapSize;
+        dirLight.shadow.mapSize.height = QUALITY_PRESETS.medium.shadowMapSize;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 60;
+        dirLight.shadow.camera.left = -25;
+        dirLight.shadow.camera.right = 25;
+        dirLight.shadow.camera.top = 25;
+        dirLight.shadow.camera.bottom = -25;
+        scene.add(dirLight);
+
+        // 彩色点光源 / Colored point lights
+        const pointLights = [];
+        const lightColors = [0xff6b6b, 0x4ecdc4, 0xf7dc6f, 0xbb8fce];
+        lightColors.forEach((color, i) => {
+            const light = new THREE.PointLight(color, 1.5, 25);
+            const angle = (i / lightColors.length) * Math.PI * 2;
+            light.position.set(Math.cos(angle) * 8, 3, Math.sin(angle) * 8);
+            scene.add(light);
+            pointLights.push(light);
+        });
+
+        // ============================================
+        // 地面 / Ground
+        // ============================================
+
+        const groundGeom = new THREE.PlaneGeometry(60, 60);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a3a,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const gridHelper = new THREE.GridHelper(60, 60, 0x333366, 0x222244);
+        scene.add(gridHelper);
+
+        // ============================================
+        // 场景物体 / Scene Objects
+        // ============================================
+
+        const sceneObjects = [];
+
+        // 中央发光球体 / Central glowing sphere
+        const centralGeom = new THREE.IcosahedronGeometry(2, 3);
+        const centralMat = new THREE.MeshStandardMaterial({
+            color: 0x4fc3f7,
+            roughness: 0.1,
+            metalness: 0.9,
+            emissive: 0x4fc3f7,
+            emissiveIntensity: 0.3
+        });
+        const centralSphere = new THREE.Mesh(centralGeom, centralMat);
+        centralSphere.position.y = 4;
+        centralSphere.castShadow = true;
+        scene.add(centralSphere);
+        sceneObjects.push(centralSphere);
+
+        // 环绕物体 / Orbiting objects
+        const orbitingObjects = [];
+        for (let i = 0; i < 12; i++) {
+            const geom = new THREE.OctahedronGeometry(0.6, 0);
+            const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color().setHSL(i / 12, 0.8, 0.5),
+                roughness: 0.2,
+                metalness: 0.7,
+                emissive: new THREE.Color().setHSL(i / 12, 0.8, 0.2),
+                emissiveIntensity: 0.5
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.orbitIndex = i;
+            mesh.userData.orbitRadius = 5 + (i % 3) * 2;
+            mesh.userData.orbitSpeed = 0.3 + (i % 4) * 0.15;
+            mesh.userData.orbitOffset = (i / 12) * Math.PI * 2;
+            scene.add(mesh);
+            orbitingObjects.push(mesh);
+            sceneObjects.push(mesh);
+        }
+
+        // 装饰环 / Decorative rings
+        for (let i = 0; i < 3; i++) {
+            const ringGeom = new THREE.TorusGeometry(6 + i * 3, 0.08, 8, 64);
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: lightColors[i],
+                emissive: lightColors[i],
+                emissiveIntensity: 0.5,
+                roughness: 0.1,
+                metalness: 0.9
+            });
+            const ring = new THREE.Mesh(ringGeom, ringMat);
+            ring.rotation.x = Math.PI / 2 + (i - 1) * 0.3;
+            ring.position.y = 4;
+            scene.add(ring);
+            sceneObjects.push(ring);
+        }
+
+        // ============================================
+        // 粒子系统 / Particle System
+        // ============================================
+
+        let particleSystem = null;
+        let particlePositions = null;
+        let particleVelocities = null;
+
+        function createParticleSystem(count) {
+            // 移除旧粒子 / Remove old particles
+            if (particleSystem) {
+                scene.remove(particleSystem);
+                particleSystem.geometry.dispose();
+                particleSystem.material.dispose();
+            }
+
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            particleVelocities = new Float32Array(count * 3);
+
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                // 球形分布 / Spherical distribution
+                const radius = 5 + Math.random() * 25;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+
+                positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i3 + 1] = Math.random() * 20;
+                positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+
+                // 速度 / Velocity
+                particleVelocities[i3] = (Math.random() - 0.5) * 0.02;
+                particleVelocities[i3 + 1] = Math.random() * 0.01 + 0.005;
+                particleVelocities[i3 + 2] = (Math.random() - 0.5) * 0.02;
+
+                // 颜色 / Color
+                const color = new THREE.Color().setHSL(Math.random() * 0.3 + 0.5, 0.8, 0.6);
+                colors[i3] = color.r;
+                colors[i3 + 1] = color.g;
+                colors[i3 + 2] = color.b;
+
+                sizes[i] = 0.1 + Math.random() * 0.3;
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            particlePositions = positions;
+
+            const material = new THREE.PointsMaterial({
+                size: 0.2,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                sizeAttenuation: true
+            });
+
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+        }
+
+        // 初始化粒子 / Initialize particles
+        createParticleSystem(QUALITY_PRESETS.medium.particleCount);
+
+        // ============================================
+        // 质量预设应用 / Apply Quality Preset
+        // ============================================
+
+        function applyPreset(presetName) {
+            const preset = QUALITY_PRESETS[presetName];
+            if (!preset) return;
+
+            currentPreset = presetName;
+
+            // 阴影 / Shadows
+            renderer.shadowMap.enabled = preset.shadows;
+            dirLight.castShadow = preset.shadows;
+            dirLight.shadow.mapSize.width = preset.shadowMapSize;
+            dirLight.shadow.mapSize.height = preset.shadowMapSize;
+            // 需要重新创建 shadow map / Need to recreate shadow map
+            if (dirLight.shadow.map) {
+                dirLight.shadow.map.dispose();
+                dirLight.shadow.map = null;
+            }
+
+            // 更新所有物体的阴影设置 / Update shadow settings for all objects
+            sceneObjects.forEach(obj => {
+                obj.castShadow = preset.shadows;
+                obj.receiveShadow = preset.shadows;
+                if (obj.material) obj.material.needsUpdate = true;
+            });
+            ground.receiveShadow = preset.shadows;
+            ground.material.needsUpdate = true;
+
+            // Bloom / 后期处理
+            useBloom = preset.bloom;
+            bloomPass.strength = preset.bloomStrength;
+
+            // DPR
+            renderer.setPixelRatio(preset.dpr);
+
+            // 粒子数量 / Particle count
+            createParticleSystem(preset.particleCount);
+
+            // 更新 UI / Update UI
+            updateSettingsDisplay(preset);
+
+            // 按钮状态 / Button states
+            document.querySelectorAll('.btn-low, .btn-medium, .btn-high').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${presetName}`).classList.add('active');
+            document.getElementById('current-preset').textContent = preset.label;
+            document.getElementById('current-preset').className = 'metric-value ' +
+                (presetName === 'low' ? 'good' : presetName === 'medium' ? 'warning' : 'bad');
+        }
+
+        function updateSettingsDisplay(preset) {
+            const setItem = (id, text, on) => {
+                const el = document.getElementById(id);
+                el.textContent = text;
+                el.className = 'setting-item ' + (on ? 'setting-on' : 'setting-off');
+            };
+            setItem('s-shadows', `Shadows: ${preset.shadows ? 'ON' : 'OFF'}`, preset.shadows);
+            setItem('s-bloom', `Bloom: ${preset.bloom ? 'ON' : 'OFF'}`, preset.bloom);
+            setItem('s-aa', `AA: ${preset.antialias ? 'ON' : 'OFF'}`, preset.antialias);
+            setItem('s-dpr', `DPR: ${preset.dpr.toFixed(1)}`, true);
+            setItem('s-shadowmap', `ShadowMap: ${preset.shadowMapSize}px`, preset.shadows);
+            setItem('s-particles', `Particles: ${preset.particleCount.toLocaleString()}`, true);
+        }
+
+        // ============================================
+        // 自适应质量 / Adaptive Quality
+        // ============================================
+
+        function checkAdaptiveQuality(avgFps) {
+            if (!adaptiveEnabled) return;
+
+            const targetFps = 55;
+            const tolerance = 5;
+
+            if (avgFps < targetFps - tolerance) {
+                // FPS 太低，降低质量 / FPS too low, reduce quality
+                if (currentPreset === 'high') {
+                    applyPreset('medium');
+                    console.log('Adaptive: Downgraded to Medium');
+                } else if (currentPreset === 'medium') {
+                    applyPreset('low');
+                    console.log('Adaptive: Downgraded to Low');
+                }
+            } else if (avgFps > targetFps + tolerance) {
+                // FPS 足够高，提升质量 / FPS high enough, increase quality
+                if (currentPreset === 'low') {
+                    applyPreset('medium');
+                    console.log('Adaptive: Upgraded to Medium');
+                } else if (currentPreset === 'medium') {
+                    applyPreset('high');
+                    console.log('Adaptive: Upgraded to High');
+                }
+            }
+        }
+
+        // ============================================
+        // UI 事件 / UI Events
+        // ============================================
+
+        document.getElementById('btn-low').addEventListener('click', () => applyPreset('low'));
+        document.getElementById('btn-medium').addEventListener('click', () => applyPreset('medium'));
+        document.getElementById('btn-high').addEventListener('click', () => applyPreset('high'));
+
+        document.getElementById('btn-adaptive').addEventListener('click', (e) => {
+            adaptiveEnabled = !adaptiveEnabled;
+            e.target.classList.toggle('active', adaptiveEnabled);
+            document.getElementById('adaptive-status').textContent = adaptiveEnabled ? 'ON' : 'OFF';
+            document.getElementById('adaptive-status').className =
+                'metric-value ' + (adaptiveEnabled ? 'good' : '');
+        });
+
+        // ============================================
+        // FPS 计算 / FPS Calculation
+        // ============================================
+
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+        const fpsHistory = [];
+        const FPS_HISTORY_SIZE = 5;
+
+        function updateFPS() {
+            frameCount++;
+            const now = performance.now();
+            const delta = now - lastFpsTime;
+
+            if (delta >= 1000) {
+                const fps = Math.round(frameCount * 1000 / delta);
+                frameCount = 0;
+                lastFpsTime = now;
+
+                // 更新显示 / Update display
+                const fpsEl = document.getElementById('fps-big');
+                fpsEl.textContent = fps;
+                const container = document.getElementById('fps-display');
+                container.style.color = fps >= 50 ? '#4caf50' : fps >= 30 ? '#ff9800' : '#f44336';
+
+                document.getElementById('fps-value').textContent = fps;
+                document.getElementById('fps-value').className = 'metric-value ' +
+                    (fps >= 50 ? 'good' : fps >= 30 ? 'warning' : 'bad');
+
+                // 渲染信息 / Render info
+                document.getElementById('draw-calls').textContent = renderer.info.render.calls;
+                document.getElementById('triangles').textContent =
+                    renderer.info.render.triangles.toLocaleString();
+                document.getElementById('particle-count').textContent =
+                    particleSystem ? particleSystem.geometry.attributes.position.count.toLocaleString() : 0;
+
+                // 自适应质量检查 / Adaptive quality check
+                fpsHistory.push(fps);
+                if (fpsHistory.length > FPS_HISTORY_SIZE) fpsHistory.shift();
+                if (fpsHistory.length >= FPS_HISTORY_SIZE) {
+                    const avgFps = fpsHistory.reduce((a, b) => a + b) / fpsHistory.length;
+                    checkAdaptiveQuality(avgFps);
+                }
+            }
+        }
+
+        // ============================================
+        // 动画循环 / Animation Loop
+        // ============================================
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            const delta = clock.getDelta();
+
+            // 中央球体动画 / Central sphere animation
+            centralSphere.rotation.y = elapsedTime * 0.3;
+            centralSphere.rotation.x = Math.sin(elapsedTime * 0.5) * 0.2;
+            centralSphere.position.y = 4 + Math.sin(elapsedTime) * 0.5;
+
+            // 环绕物体动画 / Orbiting objects animation
+            orbitingObjects.forEach((obj) => {
+                const { orbitIndex, orbitRadius, orbitSpeed, orbitOffset } = obj.userData;
+                const angle = elapsedTime * orbitSpeed + orbitOffset;
+                obj.position.x = Math.cos(angle) * orbitRadius;
+                obj.position.z = Math.sin(angle) * orbitRadius;
+                obj.position.y = 3 + Math.sin(elapsedTime * 2 + orbitIndex) * 1.5;
+                obj.rotation.x = elapsedTime * 2;
+                obj.rotation.y = elapsedTime * 1.5;
+            });
+
+            // 点光源动画 / Point light animation
+            pointLights.forEach((light, i) => {
+                const angle = elapsedTime * 0.5 + (i / pointLights.length) * Math.PI * 2;
+                light.position.x = Math.cos(angle) * 10;
+                light.position.z = Math.sin(angle) * 10;
+                light.position.y = 3 + Math.sin(elapsedTime + i) * 2;
+            });
+
+            // 粒子动画 / Particle animation
+            if (particleSystem && particlePositions && particleVelocities) {
+                const positions = particleSystem.geometry.attributes.position.array;
+                const count = positions.length / 3;
+
+                for (let i = 0; i < count; i++) {
+                    const i3 = i * 3;
+                    positions[i3] += particleVelocities[i3];
+                    positions[i3 + 1] += particleVelocities[i3 + 1];
+                    positions[i3 + 2] += particleVelocities[i3 + 2];
+
+                    // 重置超出范围的粒子 / Reset out-of-bounds particles
+                    if (positions[i3 + 1] > 25) {
+                        positions[i3 + 1] = 0;
+                        positions[i3] = (Math.random() - 0.5) * 40;
+                        positions[i3 + 2] = (Math.random() - 0.5) * 40;
+                    }
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                particleSystem.rotation.y = elapsedTime * 0.05;
+            }
+
+            controls.update();
+
+            // 根据设置选择渲染方式 / Choose render method based on settings
+            if (useBloom) {
+                composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
+
+            updateFPS();
+        }
+
+        // ============================================
+        // 响应式处理 / Responsive Handling
+        // ============================================
+
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            composer.setSize(w, h);
+        });
+
+        // 初始化 / Initialize
+        applyPreset('medium');
+        animate();
+
+        console.log('%c质量设置提示 / Quality Settings Tips:', 'color: #9c27b0; font-weight: bold; font-size: 14px;');
+        console.log('1. 质量预设可以快速切换渲染配置 / Quality presets allow quick rendering configuration changes');
+        console.log('2. 自适应质量根据 FPS 动态调整 / Adaptive quality dynamically adjusts based on FPS');
+        console.log('3. 阴影和后期处理是最大的性能消耗 / Shadows and post-processing are the biggest performance costs');
+        console.log('4. 粒子数量直接影响 CPU 和 GPU 负载 / Particle count directly affects CPU and GPU load');
+
+    </script>
+</body>
+</html>

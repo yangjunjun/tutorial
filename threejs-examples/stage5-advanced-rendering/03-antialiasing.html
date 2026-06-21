@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抗锯齿 / Anti-Aliasing Comparison</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 320px; font-size: 13px; line-height: 1.6;
+            z-index: 10;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #4f8; }
+        #info p { margin: 3px 0; }
+        .mode-btn {
+            display: inline-block; padding: 6px 14px; margin: 4px 4px 0 0;
+            border: 1px solid #4f8; background: transparent; color: #4f8;
+            border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active { background: #4f8; color: #000; }
+        #modeDesc { margin-top: 8px; color: #aaa; font-size: 12px; }
+        #zoomHint { margin-top: 6px; color: #666; font-size: 11px; font-style: italic; }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>抗锯齿对比 / Anti-Aliasing Comparison</h2>
+    <p>抗锯齿技术用于消除图形边缘的锯齿（阶梯状伪影），使画面更加平滑。</p>
+    <p style="color:#888;">Anti-aliasing removes jagged edges for smoother visuals.</p>
+    <div style="margin-top:8px;">
+        <button class="mode-btn active" data-mode="none">无AA / None</button>
+        <button class="mode-btn" data-mode="fxaa">FXAA</button>
+        <button class="mode-btn" data-mode="smaa">SMAA</button>
+    </div>
+    <p id="modeDesc">当前: 无抗锯齿 (No AA) - 注意观察锐利边缘的锯齿</p>
+    <p id="zoomHint">提示：放大画面观察边缘效果 / Tip: Zoom in to see edge aliasing</p>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222233);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(3, 3, 6);
+
+// 创建无抗锯齿的渲染器 / Create renderer without anti-aliasing
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ============ 创建锐利边缘场景 / Create Sharp-Edge Scene ============
+// 灯光 / Lighting
+scene.add(new THREE.AmbientLight(0x404060, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(3, 5, 4);
+scene.add(dirLight);
+
+// 地板 / Floor
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.9 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), floorMat);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// 多个锐利边缘的立方体 / Multiple sharp-edged cubes
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+const cubeColors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff];
+for (let i = 0; i < 6; i++) {
+    const mat = new THREE.MeshStandardMaterial({ color: cubeColors[i], roughness: 0.3, metalness: 0.5 });
+    const cube = new THREE.Mesh(cubeGeo, mat);
+    const angle = (i / 6) * Math.PI * 2;
+    cube.position.set(Math.cos(angle) * 2.5, 0.5, Math.sin(angle) * 2.5);
+    cube.rotation.y = angle;
+    scene.add(cube);
+}
+
+// 细线条 - 容易产生锯齿 / Thin lines - prone to aliasing
+const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+for (let i = 0; i < 12; i++) {
+    const points = [];
+    const angle = (i / 12) * Math.PI * 2;
+    points.push(new THREE.Vector3(0, 0.01, 0));
+    points.push(new THREE.Vector3(Math.cos(angle) * 4, 0.01, Math.sin(angle) * 4));
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    scene.add(new THREE.Line(lineGeo, lineMat));
+}
+
+// 斜面薄板 - 展示对角线锯齿 / Tilted thin plates - show diagonal aliasing
+for (let i = 0; i < 4; i++) {
+    const plateGeo = new THREE.BoxGeometry(2, 0.02, 0.3);
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+    const plate = new THREE.Mesh(plateGeo, plateMat);
+    plate.position.set(0, 1.5 + i * 0.3, 0);
+    plate.rotation.z = 0.1 * (i - 1.5);
+    plate.rotation.y = (i / 4) * Math.PI;
+    scene.add(plate);
+}
+
+// 中央金字塔 / Central pyramid
+const pyramidGeo = new THREE.ConeGeometry(0.8, 1.5, 4);
+const pyramidMat = new THREE.MeshStandardMaterial({ color: 0xffaa22, roughness: 0.2, metalness: 0.8 });
+const pyramid = new THREE.Mesh(pyramidGeo, pyramidMat);
+pyramid.position.set(0, 0.75, 0);
+scene.add(pyramid);
+
+// ============ 后处理通道设置 / Post-Processing Pass Setup ============
+let currentMode = 'none';
+let composer = null;
+
+// 创建不同抗锯齿模式的合成器 / Create composers for different AA modes
+function createComposer(mode) {
+    const c = new EffectComposer(renderer);
+    c.addPass(new RenderPass(scene, camera));
+
+    if (mode === 'fxaa') {
+        // FXAA 通道 - 快速近似抗锯齿 / FXAA pass - Fast Approximate AA
+        const fxaaPass = new ShaderPass(FXAAShader);
+        const pixelRatio = renderer.getPixelRatio();
+        fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+        fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+        c.addPass(fxaaPass);
+    } else if (mode === 'smaa') {
+        // SMAA 通道 - 增强型子像素抗锯齿 / SMAA pass - Subpixel Morphological AA
+        const smaaPass = new SMAAPass(
+            window.innerWidth * renderer.getPixelRatio(),
+            window.innerHeight * renderer.getPixelRatio()
+        );
+        c.addPass(smaaPass);
+    }
+
+    c.addPass(new OutputPass());
+    return c;
+}
+
+// 初始化 / Initialize
+composer = createComposer('none');
+
+// ============ 模式切换 UI / Mode Switch UI ============
+const modeDescEl = document.getElementById('modeDesc');
+const descriptions = {
+    none: '当前: 无抗锯齿 (No AA) - 注意观察锐利边缘的锯齿',
+    fxaa: '当前: FXAA - 快速近似抗锯齿，性能开销低',
+    smaa: '当前: SMAA - 子像素形态抗锯齿，质量更高'
+};
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        composer = createComposer(currentMode);
+        modeDescEl.textContent = descriptions[currentMode];
+    });
+});
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+
+    // 更新FXAA分辨率uniform / Update FXAA resolution uniform
+    if (currentMode === 'fxaa') {
+        const pixelRatio = renderer.getPixelRatio();
+        const fxaaPass = composer.passes.find(p => p.material && p.material.uniforms['resolution']);
+        if (fxaaPass) {
+            fxaaPass.material.uniforms['resolution'].value.x = 1 / (w * pixelRatio);
+            fxaaPass.material.uniforms['resolution'].value.y = 1 / (h * pixelRatio);
+        }
+    }
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    // 缓慢旋转金字塔 / Slowly rotate pyramid
+    pyramid.rotation.y = t * 0.3;
+
+    controls.update();
+    composer.render();
+}
+
+animate();
+</script>
+</body>
+</html>

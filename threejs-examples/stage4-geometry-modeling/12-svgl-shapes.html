@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SVG路径转3D / SVG Paths to 3D Shapes — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0c0c1d; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 300px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #ff6348; }
+    #info code {
+      background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px;
+      font-size: 11px; color: #ffeaa7;
+    }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>SVG路径转3D / SVG Paths to 3D</h2>
+  使用 <code>THREE.Shape</code> API 创建2D轮廓并挤压成3D<br/>
+  Use Shape API to create 2D outlines and extrude to 3D<br/><br/>
+  展示: <code>moveTo</code> <code>lineTo</code> <code>quadraticCurveTo</code> <code>bezierCurveTo</code> <code>arc</code>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c0c1d);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 8, 14);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+dl.position.set(6, 10, 8);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x6688ff, 0.3);
+dl2.position.set(-5, 3, -6);
+scene.add(dl2);
+
+// ── 通用挤压设置 / Common extrude settings ──
+const extrudeSettings = {
+  depth: 0.6,
+  bevelEnabled: true,
+  bevelThickness: 0.12,
+  bevelSize: 0.08,
+  bevelSegments: 4,
+  curveSegments: 16,
+};
+
+// ── 1. 星形 (moveTo, lineTo) / Star (moveTo, lineTo) ──
+function createStar() {
+  const shape = new THREE.Shape();
+  const outerR = 1.2, innerR = 0.5, points = 5;
+  // moveTo: 移动到起始点 / Move to starting point
+  const startAngle = -Math.PI / 2;
+  shape.moveTo(Math.cos(startAngle) * outerR, Math.sin(startAngle) * outerR);
+  for (let i = 1; i <= points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = startAngle + (i / (points * 2)) * Math.PI * 2;
+    // lineTo: 画直线 / Draw straight line
+    shape.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+  }
+  return shape;
+}
+
+// ── 2. 心形 (bezierCurveTo) / Heart (bezierCurveTo) ──
+function createHeart() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  // bezierCurveTo: 三次贝塞尔曲线 / Cubic bezier curve
+  shape.bezierCurveTo(0, -0.3, -0.5, -1, -1.2, -0.4);
+  shape.bezierCurveTo(-1.8, 0.3, -1, 1.2, 0, 1.6);
+  shape.bezierCurveTo(1, 1.2, 1.8, 0.3, 1.2, -0.4);
+  shape.bezierCurveTo(0.5, -1, 0, -0.3, 0, 0);
+  return shape;
+}
+
+// ── 3. 箭头 (moveTo, lineTo) / Arrow (moveTo, lineTo) ──
+function createArrow() {
+  const shape = new THREE.Shape();
+  // 使用直线段组合 / Combine line segments
+  shape.moveTo(0, 1.4);      // 尖端 / Tip
+  shape.lineTo(-1.0, 0.2);
+  shape.lineTo(-0.35, 0.2);
+  shape.lineTo(-0.35, -1.2);
+  shape.lineTo(0.35, -1.2);
+  shape.lineTo(0.35, 0.2);
+  shape.lineTo(1.0, 0.2);
+  shape.closePath();
+  return shape;
+}
+
+// ── 4. 闪电 (lineTo) / Lightning bolt (lineTo) ──
+function createLightning() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.2, 1.5);
+  shape.lineTo(0.4, 1.5);
+  shape.lineTo(0.1, 0.3);
+  shape.lineTo(0.5, 0.3);
+  shape.lineTo(-0.3, -1.5);
+  shape.lineTo(-0.05, -0.1);
+  shape.lineTo(-0.5, -0.1);
+  shape.closePath();
+  return shape;
+}
+
+// ── 5. 齿轮 (arc, lineTo) / Gear (arc, lineTo) ──
+function createGear() {
+  const shape = new THREE.Shape();
+  const teeth = 8, outerR = 1.2, innerR = 0.9, toothH = 0.3;
+  const anglePerTooth = (Math.PI * 2) / teeth;
+
+  for (let i = 0; i < teeth; i++) {
+    const a0 = i * anglePerTooth;
+    const a1 = a0 + anglePerTooth * 0.15;
+    const a2 = a0 + anglePerTooth * 0.35;
+    const a3 = a0 + anglePerTooth * 0.5;
+    const a4 = a0 + anglePerTooth * 0.65;
+    const a5 = a0 + anglePerTooth * 0.85;
+    const r1 = innerR, r2 = outerR;
+
+    if (i === 0) shape.moveTo(Math.cos(a0) * r1, Math.sin(a0) * r1);
+    else shape.lineTo(Math.cos(a0) * r1, Math.sin(a0) * r1);
+
+    shape.lineTo(Math.cos(a1) * r1, Math.sin(a1) * r1);
+    shape.lineTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
+    shape.lineTo(Math.cos(a3) * r2, Math.sin(a3) * r2);
+    shape.lineTo(Math.cos(a4) * r2, Math.sin(a4) * r2);
+    shape.lineTo(Math.cos(a5) * r1, Math.sin(a5) * r1);
+  }
+  shape.closePath();
+
+  // 中心孔 (使用arc) / Center hole (using arc)
+  const hole = new THREE.Path();
+  // arc: 圆弧 / Arc
+  hole.absarc(0, 0, 0.4, 0, Math.PI * 2, false);
+  shape.holes.push(hole);
+
+  return shape;
+}
+
+// ── 创建并放置所有形状 / Create and place all shapes ──
+const shapes = [
+  { fn: createStar, color: 0xff6348, name: 'Star 星形', x: -6 },
+  { fn: createHeart, color: 0xff4757, name: 'Heart 心形', x: -3 },
+  { fn: createArrow, color: 0x1e90ff, name: 'Arrow 箭头', x: 0 },
+  { fn: createLightning, color: 0xffd93d, name: 'Lightning 闪电', x: 3 },
+  { fn: createGear, color: 0x2ed573, name: 'Gear 齿轮', x: 6 },
+];
+
+const meshes = [];
+shapes.forEach(({ fn, color, x }) => {
+  const shape = fn();
+  const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  geo.center();
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    color, metalness: 0.35, roughness: 0.35,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0, 0);
+  scene.add(mesh);
+  meshes.push(mesh);
+});
+
+// ── 地面 / Ground ──
+const grid = new THREE.GridHelper(24, 24, 0x444466, 0x222244);
+grid.position.y = -2.5;
+scene.add(grid);
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  meshes.forEach((m, i) => {
+    m.rotation.y = t * 0.4 + i * 0.5;
+    m.position.y = Math.sin(t * 1.2 + i * 1.3) * 0.3;
+  });
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

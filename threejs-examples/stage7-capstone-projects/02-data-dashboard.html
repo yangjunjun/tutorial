@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3D Data Dashboard / 3D数据可视化大屏</title>
+<style>
+  /* ============ 全局样式 / Global Styles ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050510;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+  canvas { display: block; }
+
+  /* ============ 顶部标题栏 / Header Bar ============ */
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 32px;
+    background: linear-gradient(180deg, rgba(5,5,16,0.95) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(0,200,255,0.08);
+    pointer-events: none;
+  }
+  #header * { pointer-events: auto; }
+  .dash-title {
+    font-size: 18px; font-weight: 700; letter-spacing: 3px;
+    background: linear-gradient(90deg, #00c8ff, #7b61ff, #ff6ec7);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .dash-time { font-size: 12px; color: #556; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+
+  /* ============ KPI卡片 / KPI Cards ============ */
+  #kpi-row {
+    position: fixed; top: 64px; left: 32px; right: 32px; z-index: 100;
+    display: flex; gap: 16px; pointer-events: none;
+    flex-wrap: wrap;
+  }
+  .kpi-card {
+    flex: 1; min-width: 140px;
+    padding: 16px 20px; border-radius: 14px;
+    background: rgba(10,10,30,0.8);
+    border: 1px solid rgba(0,200,255,0.1);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    transition: border-color 0.3s;
+  }
+  .kpi-card:hover { border-color: rgba(0,200,255,0.3); }
+  .kpi-label { font-size: 11px; color: #556; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+  .kpi-value {
+    font-size: 28px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.5s;
+  }
+  .kpi-value.c1 { color: #00c8ff; }
+  .kpi-value.c2 { color: #7b61ff; }
+  .kpi-value.c3 { color: #ff6ec7; }
+  .kpi-value.c4 { color: #00e88f; }
+
+  /* ============ 柱状图标签面板 / Bar Chart Labels ============ */
+  #bar-panel {
+    position: fixed; bottom: 20px; left: 32px; z-index: 100;
+    padding: 14px 20px; border-radius: 14px;
+    background: rgba(10,10,30,0.8);
+    border: 1px solid rgba(0,200,255,0.1);
+    backdrop-filter: blur(8px);
+    font-size: 12px; color: #889;
+    max-width: 340px;
+  }
+  #bar-panel .panel-title {
+    font-size: 13px; font-weight: 600; color: #aab; margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .bar-legend { display: flex; gap: 8px; flex-wrap: wrap; }
+  .bar-legend span {
+    padding: 3px 10px; border-radius: 10px;
+    background: rgba(0,200,255,0.08);
+    font-size: 11px;
+  }
+
+  /* ============ 地球信息面板 / Globe Info Panel ============ */
+  #globe-panel {
+    position: fixed; bottom: 20px; right: 32px; z-index: 100;
+    padding: 14px 20px; border-radius: 14px;
+    background: rgba(10,10,30,0.8);
+    border: 1px solid rgba(123,97,255,0.1);
+    backdrop-filter: blur(8px);
+    font-size: 12px; color: #889;
+    max-width: 280px; text-align: right;
+  }
+  #globe-panel .panel-title {
+    font-size: 13px; font-weight: 600; color: #aab; margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  /* ============ 提示框 / Tooltip ============ */
+  #tooltip {
+    position: fixed; z-index: 200; padding: 10px 16px; border-radius: 10px;
+    background: rgba(10,10,30,0.95);
+    border: 1px solid rgba(0,200,255,0.25);
+    font-size: 13px; pointer-events: none; opacity: 0;
+    transition: opacity 0.2s;
+  }
+  #tooltip .tt-val { font-size: 20px; font-weight: 700; color: #00c8ff; }
+  #tooltip .tt-lbl { font-size: 11px; color: #667; margin-top: 2px; }
+
+  /* ============ 加载画面 / Loading ============ */
+  #loader {
+    position: fixed; inset: 0; z-index: 999;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+    background: #050510; transition: opacity 0.8s;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .loader-text { font-size: 13px; color: #445; letter-spacing: 3px; }
+  .loader-bar { width: 180px; height: 2px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
+  .loader-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00c8ff, #7b61ff); border-radius: 2px; animation: load 1.2s ease forwards; }
+  @keyframes load { to { width: 100%; } }
+
+  /* ============ 响应式 / Responsive ============ */
+  @media (max-width: 768px) {
+    #kpi-row { top: 56px; left: 12px; right: 12px; gap: 8px; }
+    .kpi-card { padding: 10px 14px; }
+    .kpi-value { font-size: 20px; }
+    #bar-panel, #globe-panel { display: none; }
+    #header { padding: 10px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 加载画面 / Loading Screen -->
+<div id="loader">
+  <div class="loader-text">INITIALIZING DASHBOARD</div>
+  <div class="loader-bar"><div class="loader-fill"></div></div>
+</div>
+
+<!-- 顶部标题 / Header -->
+<div id="header">
+  <div class="dash-title">GLOBAL ANALYTICS DASHBOARD / 全球数据分析大屏</div>
+  <div class="dash-time" id="clock">--:--:--</div>
+</div>
+
+<!-- KPI卡片行 / KPI Cards Row -->
+<div id="kpi-row">
+  <div class="kpi-card"><div class="kpi-label">Total / 总量</div><div class="kpi-value c1" id="kpi-total">--</div></div>
+  <div class="kpi-card"><div class="kpi-label">Average / 均值</div><div class="kpi-value c2" id="kpi-avg">--</div></div>
+  <div class="kpi-card"><div class="kpi-label">Max / 最大值</div><div class="kpi-value c3" id="kpi-max">--</div></div>
+  <div class="kpi-card"><div class="kpi-label">Min / 最小值</div><div class="kpi-value c4" id="kpi-min">--</div></div>
+</div>
+
+<!-- 柱状图面板 / Bar Chart Panel -->
+<div id="bar-panel">
+  <div class="panel-title">3D BAR CHART / 3D柱状图</div>
+  <div class="bar-legend" id="bar-legend"></div>
+</div>
+
+<!-- 地球面板 / Globe Panel -->
+<div id="globe-panel">
+  <div class="panel-title">GLOBAL NETWORK / 全球网络</div>
+  <div id="globe-stats">12 nodes · 8 connections</div>
+</div>
+
+<!-- 提示框 / Tooltip -->
+<div id="tooltip">
+  <div class="tt-val"></div>
+  <div class="tt-lbl"></div>
+</div>
+
+<!-- ============ 导入映射 / Import Map ============ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<!-- GSAP / GSAP Animation Library -->
+<script src="https://unpkg.com/gsap@3.12.2/dist/gsap.min.js"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ================================================================
+// 全局变量 / Global Variables
+// ================================================================
+let scene, camera, renderer, controls, composer;
+let barMesh, barCount = 24;
+let barData = [], barTargets = [];
+let globeGroup, dataPoints = [], arcLines = [];
+const clock = new THREE.Clock();
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2(-99, -99);
+const tooltip = document.getElementById('tooltip');
+const dummy = new THREE.Object3D();
+const barLabels = [
+  'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec',
+  'A1','B2','C3','D4','E5','F6','G7','H8','I9','J10','K11','L12'
+];
+
+init();
+animate();
+
+// ================================================================
+// 初始化 / Initialization
+// ================================================================
+function init() {
+  // -- 场景 / Scene --
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x050510, 0.018);
+
+  // -- 相机 / Camera --
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 12, 22);
+
+  // -- 渲染器 / Renderer --
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  document.body.appendChild(renderer.domElement);
+
+  // -- 后处理: 泛光 / Post-processing: Bloom --
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.6, 0.4, 0.85
+  );
+  composer.addPass(bloomPass);
+
+  // -- 控制器 / Controls --
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.target.set(0, 3, 0);
+  controls.minDistance = 10;
+  controls.maxDistance = 40;
+  controls.maxPolarAngle = Math.PI * 0.48;
+
+  // -- 灯光 / Lighting --
+  scene.add(new THREE.AmbientLight(0x222244, 0.6));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  dirLight.position.set(8, 15, 10);
+  scene.add(dirLight);
+  const pointLight1 = new THREE.PointLight(0x00c8ff, 1.5, 30);
+  pointLight1.position.set(-8, 8, 5);
+  scene.add(pointLight1);
+  const pointLight2 = new THREE.PointLight(0x7b61ff, 1.0, 25);
+  pointLight2.position.set(8, 6, -5);
+  scene.add(pointLight2);
+
+  // -- 构建场景元素 / Build scene elements --
+  buildFloorGrid();
+  buildBarChart();
+  buildGlobe();
+  buildBarLegend();
+
+  // -- 初始数据 / Initial data --
+  randomizeData();
+  updateKPIs();
+
+  // -- 定时更新数据 / Periodic data updates --
+  setInterval(() => {
+    randomizeData();
+    updateKPIs();
+  }, 3000);
+
+  // -- 时钟显示 / Clock display --
+  setInterval(() => {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      now.toLocaleTimeString('en-US', { hour12: false });
+  }, 1000);
+
+  // -- 事件 / Events --
+  window.addEventListener('resize', onResize);
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('click', onBarClick);
+
+  // -- 隐藏加载画面 / Hide loader --
+  setTimeout(() => document.getElementById('loader').classList.add('hidden'), 1400);
+}
+
+// ================================================================
+// 地面网格 / Floor Grid
+// ================================================================
+function buildFloorGrid() {
+  // 自定义网格 / Custom grid for futuristic look
+  const gridGeo = new THREE.PlaneGeometry(60, 60, 60, 60);
+  const gridMat = new THREE.MeshBasicMaterial({
+    color: 0x0a0a20,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.15,
+  });
+  const grid = new THREE.Mesh(gridGeo, gridMat);
+  grid.rotation.x = -Math.PI / 2;
+  grid.position.y = -0.01;
+  scene.add(grid);
+
+  // 实心底板 / Solid floor
+  const floorGeo = new THREE.PlaneGeometry(60, 60);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x060612,
+    roughness: 0.9,
+    metalness: 0.1,
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.02;
+  scene.add(floor);
+}
+
+// ================================================================
+// 3D柱状图 (InstancedMesh) / 3D Bar Chart using InstancedMesh
+// ================================================================
+function buildBarChart() {
+  // 柱子几何体 / Bar geometry (unit cube, scaled per instance)
+  const geo = new THREE.BoxGeometry(0.6, 1, 0.6);
+  // 将原点移到底部 / Shift origin to bottom
+  geo.translate(0, 0.5, 0);
+
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    metalness: 0.3,
+    roughness: 0.4,
+    transparent: true,
+    opacity: 0.9,
+  });
+
+  barMesh = new THREE.InstancedMesh(geo, mat, barCount);
+  barMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+  // 初始化颜色 / Initialize instance colors
+  const color = new THREE.Color();
+  for (let i = 0; i < barCount; i++) {
+    color.setHSL(0.55, 0.8, 0.5);
+    barMesh.setColorAt(i, color);
+  }
+  barMesh.instanceColor.needsUpdate = true;
+
+  // 布局: 6列4行 / Layout: 6 columns x 4 rows
+  barMesh.userData.positions = [];
+  const cols = 6, rows = 4;
+  const spacingX = 1.4, spacingZ = 1.4;
+  const offsetX = -(cols - 1) * spacingX / 2 - 5;
+  const offsetZ = -(rows - 1) * spacingZ / 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const x = offsetX + c * spacingX;
+      const z = offsetZ + r * spacingZ;
+      barMesh.userData.positions.push({ x, z });
+    }
+  }
+
+  scene.add(barMesh);
+
+  // 初始化数据 / Initialize data arrays
+  barData = new Array(barCount).fill(0);
+  barTargets = new Array(barCount).fill(0);
+}
+
+// ================================================================
+// 3D地球 / 3D Globe
+// ================================================================
+function buildGlobe() {
+  globeGroup = new THREE.Group();
+  globeGroup.position.set(8, 5.5, -3);
+  scene.add(globeGroup);
+
+  // 主球体 / Main sphere
+  const sphereGeo = new THREE.SphereGeometry(3.5, 48, 48);
+  const sphereMat = new THREE.MeshPhysicalMaterial({
+    color: 0x0a0a2a,
+    metalness: 0.2,
+    roughness: 0.6,
+    transparent: true,
+    opacity: 0.7,
+  });
+  const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+  globeGroup.add(sphere);
+
+  // 线框叠加 / Wireframe overlay
+  const wireGeo = new THREE.SphereGeometry(3.52, 24, 18);
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x1a2a5a,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.3,
+  });
+  globeGroup.add(new THREE.Mesh(wireGeo, wireMat));
+
+  // 经纬线 / Latitude / longitude grid rings
+  [0, 30, 60, -30, -60].forEach(lat => {
+    const r = 3.55 * Math.cos(lat * Math.PI / 180);
+    const y = 3.55 * Math.sin(lat * Math.PI / 180);
+    const ringGeo = new THREE.TorusGeometry(r, 0.01, 4, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x2244aa, transparent: true, opacity: 0.25 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = y;
+    ring.rotation.x = Math.PI / 2;
+    globeGroup.add(ring);
+  });
+
+  // 数据点 / Data points on globe surface
+  const numPoints = 12;
+  const pointGeo = new THREE.SphereGeometry(0.08, 12, 12);
+  const pointMat = new THREE.MeshBasicMaterial({ color: 0x00c8ff });
+  const pointPositions = [];
+
+  for (let i = 0; i < numPoints; i++) {
+    const lat = (Math.random() - 0.5) * Math.PI * 0.8;
+    const lng = Math.random() * Math.PI * 2;
+    const r = 3.55;
+    const x = r * Math.cos(lat) * Math.cos(lng);
+    const y = r * Math.sin(lat);
+    const z = r * Math.cos(lat) * Math.sin(lng);
+
+    const point = new THREE.Mesh(pointGeo, pointMat.clone());
+    point.position.set(x, y, z);
+    globeGroup.add(point);
+    dataPoints.push(point);
+    pointPositions.push(new THREE.Vector3(x, y, z));
+  }
+
+  // 弧线连接 / Arc connections between random pairs
+  const numArcs = 8;
+  for (let i = 0; i < numArcs; i++) {
+    const a = pointPositions[Math.floor(Math.random() * numPoints)];
+    const b = pointPositions[Math.floor(Math.random() * numPoints)];
+    if (a === b) continue;
+
+    // 中间控制点 (抬高) / Mid control point (elevated)
+    const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+    mid.normalize().multiplyScalar(5.5);
+
+    const curve = new THREE.CatmullRomCurve3([a.clone(), mid, b.clone()]);
+    const tubeGeo = new THREE.TubeGeometry(curve, 32, 0.02, 6, false);
+    const tubeMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color().setHSL(0.55 + Math.random() * 0.2, 0.8, 0.55),
+      transparent: true,
+      opacity: 0.6,
+    });
+    const tube = new THREE.Mesh(tubeGeo, tubeMat);
+    globeGroup.add(tube);
+    arcLines.push(tube);
+  }
+
+  // 更新地球统计 / Update globe stats
+  document.getElementById('globe-stats').textContent =
+    `${numPoints} nodes · ${numArcs} connections`;
+}
+
+// ================================================================
+// 数据更新 / Data Updates
+// ================================================================
+function randomizeData() {
+  for (let i = 0; i < barCount; i++) {
+    barTargets[i] = 1 + Math.random() * 8;
+  }
+  // GSAP动画过渡到新的目标高度 / Animate bars to new target heights
+  barTargets.forEach((target, i) => {
+    gsap.to(barData, {
+      [i]: target,
+      duration: 1.2,
+      ease: 'power2.out',
+    });
+  });
+}
+
+function updateKPIs() {
+  const total = barData.reduce((s, v) => s + v, 0);
+  const avg = total / barCount;
+  const max = Math.max(...barData);
+  const min = Math.min(...barData);
+
+  animateKPI('kpi-total', total.toFixed(0));
+  animateKPI('kpi-avg', avg.toFixed(1));
+  animateKPI('kpi-max', max.toFixed(1));
+  animateKPI('kpi-min', min.toFixed(1));
+}
+
+function animateKPI(id, value) {
+  const el = document.getElementById(id);
+  gsap.to(el, {
+    duration: 0.5,
+    ease: 'power1.out',
+    onUpdate: function() { /* text set at end */ },
+    onComplete: () => { el.textContent = value; }
+  });
+  // Quick fade effect
+  gsap.fromTo(el, { opacity: 0.3 }, { opacity: 1, duration: 0.6 });
+}
+
+// ================================================================
+// 柱状图图例 / Bar Chart Legend
+// ================================================================
+function buildBarLegend() {
+  const legend = document.getElementById('bar-legend');
+  const months = ['Q1','Q2','Q3','Q4','Metrics A','Metrics B'];
+  months.forEach(m => {
+    const span = document.createElement('span');
+    span.textContent = m;
+    legend.appendChild(span);
+  });
+}
+
+// ================================================================
+// 鼠标交互 / Mouse Interaction
+// ================================================================
+function onMouseMove(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  // 射线检测柱状图 / Raycast against bar chart
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(barMesh);
+  if (hits.length > 0) {
+    const idx = hits[0].instanceId;
+    const val = barData[idx].toFixed(1);
+    tooltip.querySelector('.tt-val').textContent = val;
+    tooltip.querySelector('.tt-lbl').textContent = barLabels[idx] || `Item ${idx}`;
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top = (e.clientY - 30) + 'px';
+    tooltip.style.opacity = '1';
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    tooltip.style.opacity = '0';
+    renderer.domElement.style.cursor = 'default';
+  }
+}
+
+function onBarClick(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(barMesh);
+  if (hits.length > 0) {
+    // 高亮被点击的柱子 / Highlight clicked bar
+    const idx = hits[0].instanceId;
+    const color = new THREE.Color(0xff6ec7);
+    barMesh.setColorAt(idx, color);
+    barMesh.instanceColor.needsUpdate = true;
+    // 2秒后恢复 / Reset after 2s
+    setTimeout(() => {
+      const hsl = valueToHSL(barData[idx]);
+      barMesh.setColorAt(idx, new THREE.Color().setHSL(hsl.h, hsl.s, hsl.l));
+      barMesh.instanceColor.needsUpdate = true;
+    }, 2000);
+  }
+}
+
+// ================================================================
+// 工具函数 / Utility Functions
+// ================================================================
+function valueToHSL(value) {
+  // 值映射到色相 (冷到暖: 0.6蓝 -> 0.0红) / Map value to hue (cool to warm)
+  const t = Math.min(value / 9, 1);
+  return { h: 0.6 - t * 0.6, s: 0.8, l: 0.45 + t * 0.1 };
+}
+
+// ================================================================
+// 窗口调整 / Resize Handler
+// ================================================================
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ================================================================
+// 动画循环 / Animation Loop
+// ================================================================
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // -- 更新柱状图实例矩阵 / Update bar instance matrices --
+  for (let i = 0; i < barCount; i++) {
+    const pos = barMesh.userData.positions[i];
+    const h = Math.max(barData[i], 0.05);
+    dummy.position.set(pos.x, 0, pos.z);
+    dummy.scale.set(1, h, 1);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    barMesh.setMatrixAt(i, dummy.matrix);
+
+    // 根据高度更新颜色 (冷到暖) / Update color by height (cool to warm)
+    const hsl = valueToHSL(barData[i]);
+    const color = new THREE.Color().setHSL(hsl.h, hsl.s, hsl.l);
+    barMesh.setColorAt(i, color);
+  }
+  barMesh.instanceMatrix.needsUpdate = true;
+  barMesh.instanceColor.needsUpdate = true;
+
+  // -- 旋转地球 / Rotate globe --
+  if (globeGroup) {
+    globeGroup.rotation.y = t * 0.12;
+  }
+
+  // -- 数据点脉冲 / Data point pulse --
+  dataPoints.forEach((p, i) => {
+    const s = 1 + 0.4 * Math.sin(t * 3 + i * 0.8);
+    p.scale.setScalar(s);
+  });
+
+  // -- 弧线呼吸效果 / Arc breathing effect --
+  arcLines.forEach((arc, i) => {
+    arc.material.opacity = 0.3 + 0.3 * Math.sin(t * 2 + i * 1.2);
+  });
+
+  // -- 更新KPI / Update KPIs in animation for smooth numbers --
+  if (Math.floor(t * 2) % 2 === 0) {
+    const total = barData.reduce((s, v) => s + v, 0);
+    const avg = total / barCount;
+    const max = Math.max(...barData);
+    const min = Math.min(...barData);
+    document.getElementById('kpi-total').textContent = total.toFixed(0);
+    document.getElementById('kpi-avg').textContent = avg.toFixed(1);
+    document.getElementById('kpi-max').textContent = max.toFixed(1);
+    document.getElementById('kpi-min').textContent = min.toFixed(1);
+  }
+
+  controls.update();
+  composer.render();
+}
+</script>
+</body>
+</html>

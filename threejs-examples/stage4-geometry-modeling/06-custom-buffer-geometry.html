@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义BufferGeometry / Custom BufferGeometry — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0a0a1a; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 12px; line-height: 1.6; max-width: 340px;
+      pointer-events: none; backdrop-filter: blur(6px);
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+    #info h2 { font-size: 14px; margin-bottom: 6px; color: #00d2d3; font-family: 'Segoe UI', sans-serif; }
+    #info .data { color: #a0ffa0; margin-top: 6px; white-space: pre; overflow: hidden; max-height: 180px; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 220px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #00d2d3; margin: 8px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    .btn-group { display: flex; flex-direction: column; gap: 6px; }
+    .btn-group button {
+      padding: 8px; border: 1px solid #00d2d3; background: transparent; color: #00d2d3;
+      border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .2s;
+    }
+    .btn-group button:hover, .btn-group button.active { background: rgba(0,210,211,0.22); }
+    #controls button.wire-btn {
+      margin-top: 12px; width: 100%; padding: 7px;
+      border: 1px solid #00d2d3; background: transparent; color: #00d2d3;
+      border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+    #controls button.wire-btn:hover { background: rgba(0,210,211,0.15); }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>自定义BufferGeometry / Custom BufferGeometry</h2>
+  从底层构建网格：顶点、索引、法线<br/>
+  Build meshes from scratch: vertices, indices, normals
+  <div class="data" id="dataDisplay"></div>
+</div>
+
+<div id="controls">
+  <h3>选择形状 / Select Shape</h3>
+  <div class="btn-group">
+    <button id="btnTri" class="active">三角形 Triangle</button>
+    <button id="btnQuad">四边形 Quad</button>
+    <button id="btnPyramid">金字塔 Pyramid</button>
+  </div>
+  <button class="wire-btn" id="btnWire">切换线框 / Toggle Wireframe</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a1a);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(2, 3, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const dl = new THREE.DirectionalLight(0xffffff, 1.0);
+dl.position.set(4, 6, 5);
+scene.add(dl);
+
+// ── 材质 / Material ──
+const matSolid = new THREE.MeshStandardMaterial({ color: 0x00d2d3, side: THREE.DoubleSide, metalness: 0.2, roughness: 0.5 });
+const matWire = new THREE.MeshStandardMaterial({ color: 0x00d2d3, wireframe: true });
+let useWireframe = false;
+let mesh = null;
+
+const dataDisplay = document.getElementById('dataDisplay');
+
+// ── 三角形 / Triangle ──
+function buildTriangle() {
+  const geo = new THREE.BufferGeometry();
+  // 3个顶点 / 3 vertices
+  const vertices = new Float32Array([
+    -1, 0, 0,   // v0
+     1, 0, 0,   // v1
+     0, 1.5, 0, // v2
+  ]);
+  // UV坐标 / UV coordinates
+  const uvs = new Float32Array([
+    0, 0,
+    1, 0,
+    0.5, 1,
+  ]);
+  // 索引 / Indices
+  const indices = [0, 1, 2];
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals(); // 自动计算法线 / Auto-compute normals
+
+  updateDataDisplay('Triangle', vertices, indices);
+  return geo;
+}
+
+// ── 四边形 / Quad (two triangles) ──
+function buildQuad() {
+  const geo = new THREE.BufferGeometry();
+  const vertices = new Float32Array([
+    -1, -1, 0, // v0 左下 / bottom-left
+     1, -1, 0, // v1 右下 / bottom-right
+     1,  1, 0, // v2 右上 / top-right
+    -1,  1, 0, // v3 左上 / top-left
+  ]);
+  const uvs = new Float32Array([0,0, 1,0, 1,1, 0,1]);
+  // 两个三角形 / Two triangles
+  const indices = [0, 1, 2, 0, 2, 3];
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  updateDataDisplay('Quad', vertices, indices);
+  return geo;
+}
+
+// ── 金字塔 / Pyramid ──
+function buildPyramid() {
+  const geo = new THREE.BufferGeometry();
+  const s = 1, h = 1.8;
+  const vertices = new Float32Array([
+     0,  h,  0, // v0 顶点 / apex
+    -s,  0, -s, // v1
+     s,  0, -s, // v2
+     s,  0,  s, // v3
+    -s,  0,  s, // v4
+  ]);
+  const uvs = new Float32Array([
+    0.5,1, 0,0, 1,0, 1,1, 0,1
+  ]);
+  // 4个三角面 / 4 triangular faces
+  const indices = [
+    0, 1, 2, // 前 / front
+    0, 2, 3, // 右 / right
+    0, 3, 4, // 后 / back
+    0, 4, 1, // 左 / left
+    1, 4, 3, // 底面三角1 / bottom tri 1
+    1, 3, 2, // 底面三角2 / bottom tri 2
+  ];
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  updateDataDisplay('Pyramid', vertices, indices);
+  return geo;
+}
+
+// 更新信息面板中的原始数据 / Update raw data display in info panel
+function updateDataDisplay(name, verts, idxs) {
+  let txt = `── ${name} ──\nVertices (${verts.length / 3}):\n`;
+  for (let i = 0; i < verts.length; i += 3) {
+    txt += `  v${i/3}: [${verts[i].toFixed(1)}, ${verts[i+1].toFixed(1)}, ${verts[i+2].toFixed(1)}]\n`;
+  }
+  txt += `Indices: [${idxs.join(', ')}]\nFaces: ${idxs.length / 3}`;
+  dataDisplay.textContent = txt;
+}
+
+const builders = { triangle: buildTriangle, quad: buildQuad, pyramid: buildPyramid };
+let current = 'triangle';
+
+function rebuild() {
+  if (mesh) { mesh.geometry.dispose(); scene.remove(mesh); }
+  const geo = builders[current]();
+  mesh = new THREE.Mesh(geo, useWireframe ? matWire : matSolid);
+  scene.add(mesh);
+}
+rebuild();
+
+// ── 地面 / Ground ──
+scene.add(new THREE.GridHelper(10, 10, 0x444466, 0x333355));
+
+// ── 按钮绑定 / Button bindings ──
+[['btnTri','triangle'],['btnQuad','quad'],['btnPyramid','pyramid']].forEach(([btnId, key]) => {
+  document.getElementById(btnId).addEventListener('click', (e) => {
+    current = key;
+    document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    rebuild();
+  });
+});
+
+document.getElementById('btnWire').addEventListener('click', () => {
+  useWireframe = !useWireframe;
+  if (mesh) mesh.material = useWireframe ? matWire : matSolid;
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画 / Animate ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  if (mesh) {
+    mesh.rotation.y = t * 0.4;
+    mesh.rotation.x = Math.sin(t * 0.3) * 0.2;
+  }
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

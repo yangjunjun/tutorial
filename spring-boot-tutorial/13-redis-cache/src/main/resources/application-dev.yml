@@ -1,0 +1,98 @@
+# =====================================================
+# Spring Boot 3 博客系统 — application-dev.yml
+# 开发环境配置（本章重点：新增 Redis 配置）
+# =====================================================
+
+spring:
+  # =====================================================
+  # 数据源配置
+  # =====================================================
+  datasource:
+    url: jdbc:mysql://localhost:3306/blog?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # HikariCP 连接池配置
+    hikari:
+      minimum-idle: 5              # 最小空闲连接数
+      maximum-pool-size: 20        # 最大连接数
+      idle-timeout: 300000         # 空闲连接超时（5 分钟）
+      max-lifetime: 1800000        # 连接最大生命周期（30 分钟）
+      connection-timeout: 30000    # 获取连接超时时间
+
+  # =====================================================
+  # Redis 配置（本章新增）
+  # =====================================================
+  data:
+    redis:
+      host: localhost              # Redis 服务器地址
+      port: 6379                   # Redis 端口（默认 6379）
+      password:                    # Redis 密码（无密码留空；生产环境务必设置密码）
+      database: 0                  # 使用的数据库编号（0-15，默认 0）
+      timeout: 10000ms             # 连接超时时间
+
+      # Lettuce 连接池配置
+      # Lettuce 是 Spring Boot 3 默认的 Redis 客户端
+      # 它是线程安全的，适合多线程环境
+      lettuce:
+        pool:
+          max-active: 16           # 最大活跃连接数（-1 表示无限制）
+          max-idle: 8              # 最大空闲连接数
+          min-idle: 2              # 最小空闲连接数（保持一定数量的预热连接）
+          max-wait: 3000ms         # 获取连接的最大等待时间（-1 表示无限等待）
+        # 连接保活（可选，推荐在长连接场景下启用）
+        # shutdown-timeout: 200ms  # 关闭连接池的超时时间
+
+  # =====================================================
+  # 文件上传配置
+  # =====================================================
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+# =====================================================
+# SpringDoc OpenAPI (Swagger) 配置
+# =====================================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+# =====================================================
+# MyBatis-Plus 配置
+# =====================================================
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.blog.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    # 开发环境开启 SQL 日志输出，生产环境建议关闭
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# =====================================================
+# 日志配置
+# =====================================================
+logging:
+  level:
+    com.example.blog: debug
+    # 开启 Redis 操作的调试日志（可选，排查缓存问题时启用）
+    # org.springframework.data.redis: debug
+    # 开启 Spring Cache 的调试日志（可选）
+    # org.springframework.cache: trace
+
+# =====================================================
+# 自定义文件上传配置
+# =====================================================
+file:
+  upload:
+    base-path: /data/blog/uploads
+    url-prefix: /uploads
+    allowed-types: image/jpeg,image/png,image/gif,image/webp,application/pdf
+    max-size: 10485760  # 10MB

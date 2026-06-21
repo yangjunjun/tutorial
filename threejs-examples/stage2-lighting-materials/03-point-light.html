@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 - 点光源 / PointLight</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.75); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.6; max-width: 320px;
+      pointer-events: auto; z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .ctrl-group { margin-top: 8px; }
+    .ctrl-group label { display: block; margin-bottom: 2px; font-size: 12px; color: #aaa; }
+    input[type="range"] { width: 100%; margin: 2px 0 6px; }
+    .val { color: #4fc3f7; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>点光源 / PointLight</h2>
+    <p>点光源从一个点向所有方向发射光线，亮度随距离衰减。<br>
+       A PointLight emits light in all directions from a single point, with intensity falling off over distance.</p>
+    <div class="ctrl-group">
+      <label>强度 / Intensity: <span class="val" id="intVal">2.0</span></label>
+      <input type="range" id="intSlider" min="0" max="5" step="0.1" value="2">
+    </div>
+    <div class="ctrl-group">
+      <label>距离 / Distance: <span class="val" id="distVal">10</span></label>
+      <input type="range" id="distSlider" min="0" max="30" step="0.5" value="10">
+    </div>
+    <div class="ctrl-group">
+      <label>衰减 / Decay: <span class="val" id="decayVal">2.0</span></label>
+      <input type="range" id="decaySlider" min="0" max="5" step="0.1" value="2">
+    </div>
+    <div class="ctrl-group">
+      <label>动画速度 / Anim Speed: <span class="val" id="speedVal">1.0</span></label>
+      <input type="range" id="speedSlider" min="0" max="3" step="0.1" value="1">
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础设置 / Basic setup =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a1a);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // ===== 点光源 / Point Light =====
+    const pointLight = new THREE.PointLight(0xffaa44, 2, 10, 2);
+    pointLight.position.set(0, 2, 0);
+    pointLight.castShadow = true;
+    scene.add(pointLight);
+
+    // 发光球体表示光源位置 / Glowing sphere represents light source position
+    const bulbGeo = new THREE.SphereGeometry(0.15, 16, 16);
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffaa44 });
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    pointLight.add(bulb); // 作为子对象跟随光源 / Child of light, follows it
+
+    // 弱环境光 / Weak ambient fill
+    scene.add(new THREE.AmbientLight(0x111122, 0.3));
+
+    // ===== 围绕光源排列的物体 / Objects arranged around the light =====
+    const objColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22];
+    const objects = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const r = 3;
+      const geos = [
+        new THREE.BoxGeometry(0.7, 0.7, 0.7),
+        new THREE.SphereGeometry(0.45, 24, 24),
+        new THREE.TorusKnotGeometry(0.3, 0.1, 64, 8),
+        new THREE.ConeGeometry(0.4, 0.9, 24),
+        new THREE.OctahedronGeometry(0.45),
+        new THREE.CylinderGeometry(0.3, 0.3, 0.8, 24),
+      ];
+      const mesh = new THREE.Mesh(
+        geos[i],
+        new THREE.MeshStandardMaterial({ color: objColors[i], roughness: 0.4, metalness: 0.2 })
+      );
+      mesh.position.set(Math.cos(angle) * r, 0.5, Math.sin(angle) * r);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      objects.push(mesh);
+    }
+
+    // 地面 / Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(16, 16),
+      new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.9 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // ===== UI 绑定 / UI bindings =====
+    let animSpeed = 1.0;
+    const bind = (sliderId, valId, cb) => {
+      const slider = document.getElementById(sliderId);
+      const valEl = document.getElementById(valId);
+      slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        valEl.textContent = v.toFixed(1);
+        cb(v);
+      });
+    };
+    bind('intSlider', 'intVal', v => pointLight.intensity = v);
+    bind('distSlider', 'distVal', v => { pointLight.distance = v; document.getElementById('distVal').textContent = v.toFixed(0); });
+    bind('decaySlider', 'decayVal', v => pointLight.decay = v);
+    bind('speedSlider', 'speedVal', v => animSpeed = v);
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      // 光源上下移动动画 / Light moves up and down
+      pointLight.position.y = 2 + Math.sin(t * animSpeed) * 1.5;
+
+      // 物体轻微旋转 / Gently rotate objects
+      objects.forEach(obj => { obj.rotation.y += 0.005; });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

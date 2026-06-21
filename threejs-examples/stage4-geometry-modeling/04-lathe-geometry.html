@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>车削几何体 / LatheGeometry — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #16213e; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #e2b0ff; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 240px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #e2b0ff; margin: 10px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 100px; accent-color: #e2b0ff; }
+    #controls .val { color: #e2b0ff; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .btn-group button {
+      flex: 1 1 45%; padding: 6px 8px;
+      border: 1px solid #e2b0ff; background: transparent; color: #e2b0ff;
+      border-radius: 6px; cursor: pointer; font-size: 12px; transition: background .2s;
+    }
+    .btn-group button:hover, .btn-group button.active { background: rgba(226,176,255,0.25); }
+    #controls button.wire-btn {
+      margin-top: 10px; width: 100%; padding: 7px;
+      border: 1px solid #e2b0ff; background: transparent; color: #e2b0ff;
+      border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .2s;
+    }
+    #controls button.wire-btn:hover { background: rgba(226,176,255,0.18); }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>车削几何体 / LatheGeometry</h2>
+  从轮廓点绕轴旋转生成3D形状<br/>
+  Generate 3D shapes by rotating profile points around an axis<br/>
+  观察左侧线条：轮廓曲线<br/>
+  Left line: the profile curve
+</div>
+
+<div id="controls">
+  <h3>预设形状 / Preset Shapes</h3>
+  <div class="btn-group">
+    <button id="btnVase" class="active">花瓶 Vase</button>
+    <button id="btnGoblet">高脚杯 Goblet</button>
+    <button id="btnBottle">瓶子 Bottle</button>
+    <button id="btnBowl">碗 Bowl</button>
+  </div>
+
+  <h3>车削参数 / Lathe Params</h3>
+  <label>segments <input type="range" id="lSeg" min="3" max="64" step="1" value="32"><span class="val" id="lSegv">32</span></label>
+  <label>phiStart <input type="range" id="lPS" min="0" max="6.28" step="0.01" value="0"><span class="val" id="lPSv">0.00</span></label>
+  <label>phiLength <input type="range" id="lPL" min="0.1" max="6.28" step="0.01" value="6.28"><span class="val" id="lPLv">6.28</span></label>
+
+  <button class="wire-btn" id="btnWire">切换线框 / Toggle Wireframe</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x16213e);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(3, 4, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const dl = new THREE.DirectionalLight(0xffffff, 1.1);
+dl.position.set(5, 8, 5);
+scene.add(dl);
+
+// ── 预设轮廓点 / Preset profile points ──
+// 每个点是 Vector2(x, y)，x是到轴的距离，y是高度
+const presets = {
+  // 花瓶 / Vase
+  vase: (() => {
+    const pts = [];
+    for (let i = 0; i < 20; i++) {
+      const t = i / 19;
+      const x = 0.3 + Math.sin(t * Math.PI) * 0.8 + Math.sin(t * Math.PI * 2) * 0.2;
+      pts.push(new THREE.Vector2(x, t * 3));
+    }
+    return pts;
+  })(),
+  // 高脚杯 / Goblet
+  goblet: [
+    new THREE.Vector2(0.8, 0), new THREE.Vector2(0.8, 0.1),
+    new THREE.Vector2(0.15, 0.4), new THREE.Vector2(0.12, 1.2),
+    new THREE.Vector2(0.15, 1.4), new THREE.Vector2(0.6, 1.8),
+    new THREE.Vector2(0.7, 2.2), new THREE.Vector2(0.65, 2.5),
+    new THREE.Vector2(0.6, 2.6),
+  ],
+  // 瓶子 / Bottle
+  bottle: [
+    new THREE.Vector2(0.6, 0), new THREE.Vector2(0.65, 0.1),
+    new THREE.Vector2(0.7, 0.5), new THREE.Vector2(0.7, 1.5),
+    new THREE.Vector2(0.65, 1.7), new THREE.Vector2(0.3, 2.0),
+    new THREE.Vector2(0.2, 2.5), new THREE.Vector2(0.2, 3.0),
+    new THREE.Vector2(0.25, 3.1), new THREE.Vector2(0.25, 3.2),
+    new THREE.Vector2(0.2, 3.2),
+  ],
+  // 碗 / Bowl
+  bowl: (() => {
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const t = i / 11;
+      const angle = t * Math.PI * 0.5;
+      pts.push(new THREE.Vector2(Math.sin(angle) * 1.5, Math.cos(angle) * 1.0));
+    }
+    return pts;
+  })(),
+};
+
+let currentPreset = 'vase';
+const matLathe = new THREE.MeshStandardMaterial({ color: 0xe2b0ff, side: THREE.DoubleSide, metalness: 0.2, roughness: 0.5 });
+const matLine = new THREE.LineBasicMaterial({ color: 0xffe066 });
+
+let latheMesh = null, profileLine = null;
+
+// 构建车削几何体 / Build lathe geometry
+function buildLathe() {
+  const seg = +document.getElementById('lSeg').value;
+  const ps = +document.getElementById('lPS').value;
+  const pl = +document.getElementById('lPL').value;
+  const pts = presets[currentPreset];
+
+  // 移除旧的 / Remove old
+  if (latheMesh) { latheMesh.geometry.dispose(); scene.remove(latheMesh); }
+  if (profileLine) { profileLine.geometry.dispose(); scene.remove(profileLine); }
+
+  // 创建轮廓线 / Create profile line
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(
+    pts.map(p => new THREE.Vector3(p.x, p.y - 1.5, 0))
+  );
+  profileLine = new THREE.Line(lineGeo, matLine);
+  profileLine.position.set(-3, 0, 0);
+  scene.add(profileLine);
+
+  // 创建车削几何体 / Create lathe geometry
+  // LatheGeometry(points, segments, phiStart, phiLength)
+  const geo = new THREE.LatheGeometry(pts, seg, ps, pl);
+  geo.computeVertexNormals();
+  latheMesh = new THREE.Mesh(geo, matLathe);
+  latheMesh.position.set(2, -1.5, 0);
+  scene.add(latheMesh);
+}
+
+buildLathe();
+
+// ── 地面 / Ground ──
+const grid = new THREE.GridHelper(16, 16, 0x444466, 0x333355);
+grid.position.y = -2;
+scene.add(grid);
+
+// ── 预设按钮 / Preset buttons ──
+['Vase','Goblet','Bottle','Bowl'].forEach(name => {
+  document.getElementById('btn' + name).addEventListener('click', (e) => {
+    currentPreset = name.toLowerCase();
+    document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    buildLathe();
+  });
+});
+
+// ── 滑块 / Sliders ──
+[['lSeg','lSegv',0], ['lPS','lPSv',2], ['lPL','lPLv',2]].forEach(([id, vid, dec]) => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+document.getElementById(id).value).toFixed(dec);
+    buildLathe();
+  });
+});
+
+// ── 线框切换 / Wireframe ──
+document.getElementById('btnWire').addEventListener('click', () => {
+  matLathe.wireframe = !matLathe.wireframe;
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画 / Animate ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  if (latheMesh) latheMesh.rotation.y = t * 0.3;
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3D Product Showcase / 3D产品展示器</title>
+<style>
+  /* ============ 全局样式 / Global Styles ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+  canvas { display: block; }
+
+  /* ============ 顶部导航栏 / Top Navigation Bar ============ */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px;
+    background: linear-gradient(180deg, rgba(10,10,15,0.9) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  #topbar * { pointer-events: auto; }
+  .brand { font-size: 20px; font-weight: 700; letter-spacing: 4px; color: #fff; }
+  .brand span { color: #6c8cff; }
+
+  /* ============ 产品信息面板 / Product Info Panel ============ */
+  #info-panel {
+    position: fixed; top: 80px; left: 32px; z-index: 100;
+    max-width: 320px; padding: 24px;
+    background: rgba(15,15,25,0.85);
+    border: 1px solid rgba(108,140,255,0.15);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    transition: opacity 0.4s;
+  }
+  #info-panel h1 {
+    font-size: 26px; font-weight: 700; margin-bottom: 4px;
+    background: linear-gradient(135deg, #6c8cff, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #info-panel .subtitle { font-size: 13px; color: #888; margin-bottom: 16px; }
+  #info-panel ul { list-style: none; padding: 0; }
+  #info-panel li {
+    font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #info-panel li::before { content: '✦'; color: #6c8cff; font-size: 10px; }
+
+  /* ============ 配置面板 / Configurator Panel ============ */
+  #config-panel {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 18px 28px; border-radius: 20px;
+    background: rgba(15,15,25,0.88);
+    border: 1px solid rgba(108,140,255,0.15);
+    backdrop-filter: blur(12px);
+  }
+  .config-row { display: flex; align-items: center; gap: 12px; }
+  .config-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #666;
+    min-width: 60px; text-align: right;
+  }
+  /* 颜色色块 / Color Swatches */
+  .swatch {
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; transition: border-color 0.3s, transform 0.2s;
+  }
+  .swatch:hover { transform: scale(1.15); }
+  .swatch.active { border-color: #fff; }
+  /* 材质按钮 / Material Buttons */
+  .mat-btn {
+    padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);
+    background: transparent; color: #ccc; font-size: 12px; cursor: pointer;
+    transition: all 0.3s;
+  }
+  .mat-btn:hover { border-color: #6c8cff; color: #fff; }
+  .mat-btn.active { background: #6c8cff; border-color: #6c8cff; color: #fff; }
+
+  /* ============ 提示框 / Tooltip ============ */
+  #tooltip {
+    position: fixed; z-index: 200; padding: 12px 18px; border-radius: 12px;
+    background: rgba(20,20,35,0.95);
+    border: 1px solid rgba(108,140,255,0.3);
+    backdrop-filter: blur(8px);
+    font-size: 13px; line-height: 1.6;
+    pointer-events: none; opacity: 0;
+    transition: opacity 0.3s;
+    max-width: 220px;
+  }
+  #tooltip .tt-title { font-weight: 700; color: #6c8cff; margin-bottom: 4px; }
+  #tooltip .tt-body { color: #aaa; }
+
+  /* ============ 加载画面 / Loading Screen ============ */
+  #loader {
+    position: fixed; inset: 0; z-index: 999;
+    display: flex; align-items: center; justify-content: center;
+    background: #0a0a0f;
+    transition: opacity 0.8s;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(108,140,255,0.2);
+    border-top-color: #6c8cff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ============ 响应式 / Responsive ============ */
+  @media (max-width: 768px) {
+    #info-panel { top: auto; bottom: 140px; left: 16px; right: 16px; max-width: none; padding: 16px; }
+    #info-panel h1 { font-size: 20px; }
+    #config-panel { bottom: 16px; padding: 12px 16px; }
+    #topbar { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 加载画面 / Loading Screen -->
+<div id="loader"><div class="spinner"></div></div>
+
+<!-- 顶部导航 / Top Nav -->
+<div id="topbar">
+  <div class="brand">AURA<span>PRO</span></div>
+  <div style="font-size:12px;color:#555;letter-spacing:1px;">STAGE 7 · CAPSTONE</div>
+</div>
+
+<!-- 产品信息 / Product Info -->
+<div id="info-panel">
+  <h1>AuraPro X1</h1>
+  <div class="subtitle">Wireless Noise-Cancelling Headphones / 无线降噪耳机</div>
+  <ul>
+    <li>40dB Active Noise Cancellation / 40dB主动降噪</li>
+    <li>50-Hour Battery Life / 50小时续航</li>
+    <li>Hi-Res Audio Certified / Hi-Res认证音质</li>
+    <li>Adaptive EQ Technology / 自适应均衡技术</li>
+    <li>Premium Memory Foam Pads / 高级记忆棉耳垫</li>
+  </ul>
+</div>
+
+<!-- 配置面板 / Config Panel -->
+<div id="config-panel">
+  <div class="config-row">
+    <span class="config-label">Color</span>
+    <div class="swatch active" data-color="#2a2a3a" style="background:#2a2a3a"></div>
+    <div class="swatch" data-color="#c0392b" style="background:#c0392b"></div>
+    <div class="swatch" data-color="#2980b9" style="background:#2980b9"></div>
+    <div class="swatch" data-color="#f39c12" style="background:#f39c12"></div>
+    <div class="swatch" data-color="#ecf0f1" style="background:#ecf0f1"></div>
+  </div>
+  <div class="config-row">
+    <span class="config-label">Material</span>
+    <button class="mat-btn" data-mat="matte">Matte / 哑光</button>
+    <button class="mat-btn active" data-mat="glossy">Glossy / 光泽</button>
+    <button class="mat-btn" data-mat="metallic">Metallic / 金属</button>
+  </div>
+</div>
+
+<!-- 提示框 / Tooltip -->
+<div id="tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-body"></div>
+</div>
+
+<!-- ============ 导入映射 / Import Map ============ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<!-- GSAP动画库 / GSAP Animation Library -->
+<script src="https://unpkg.com/gsap@3.12.2/dist/gsap.min.js"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ================================================================
+// 全局变量 / Global Variables
+// ================================================================
+let scene, camera, renderer, controls;
+let productGroup;          // 产品组 / Product group
+let hotspotMeshes = [];    // 热点标记 / Hotspot markers
+let productMaterials = [];     // 可换色的材质 / Swappable materials
+let currentColor = new THREE.Color('#2a2a3a');
+let groundMirror;
+const clock = new THREE.Clock();
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+
+// 热点数据 / Hotspot data
+const hotspotData = [
+  { pos: [0, 1.55, 0], title: 'Headband / 头梁', body: 'Aerospace-grade aluminum with adaptive tension system.\n航空级铝合金，自适应张力系统。' },
+  { pos: [-1.35, 0.15, 0], title: 'Left Driver / 左单元', body: '40mm beryllium-coated driver, 5Hz–40kHz response.\n40mm铍涂层振膜，5Hz–40kHz频响。' },
+  { pos: [1.35, 0.15, 0], title: 'Right Driver / 右单元', body: 'Touch-sensitive controls with haptic feedback.\n触控感应面板，触觉反馈。' },
+];
+
+init();
+animate();
+
+// ================================================================
+// 初始化 / Initialization
+// ================================================================
+function init() {
+  // -- 场景 / Scene --
+  scene = new THREE.Scene();
+
+  // -- 渐变背景 / Procedural gradient background --
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = 2; bgCanvas.height = 512;
+  const ctx = bgCanvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#1a1a2e');
+  grad.addColorStop(0.5, '#0f0f1a');
+  grad.addColorStop(1, '#050510');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 2, 512);
+  const bgTexture = new THREE.CanvasTexture(bgCanvas);
+  scene.background = bgTexture;
+
+  // -- 相机 / Camera --
+  camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(3.5, 2.5, 4);
+
+  // -- 渲染器 / Renderer --
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  // -- 控制器 / OrbitControls --
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.2;
+  controls.minPolarAngle = Math.PI * 0.2;
+  controls.maxPolarAngle = Math.PI * 0.65;
+  controls.minDistance = 3;
+  controls.maxDistance = 10;
+  controls.target.set(0, 0.8, 0);
+
+  // -- 灯光 / Lighting --
+  setupLights();
+
+  // -- 产品模型 / Product Model --
+  buildHeadphones();
+
+  // -- 地面 / Ground Plane --
+  buildGround();
+
+  // -- 热点标记 / Hotspot Markers --
+  buildHotspots();
+
+  // -- 事件监听 / Event Listeners --
+  window.addEventListener('resize', onResize);
+  renderer.domElement.addEventListener('click', onClick);
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+  // -- UI交互 / UI Interactions --
+  setupConfigurator();
+
+  // -- 隐藏加载画面 / Hide loader --
+  setTimeout(() => document.getElementById('loader').classList.add('hidden'), 600);
+}
+
+// ================================================================
+// 三点布光 / Three-Point Studio Lighting
+// ================================================================
+function setupLights() {
+  // 环境光 / Ambient fill
+  scene.add(new THREE.AmbientLight(0x404060, 0.4));
+
+  // 主灯 (Key Light) — 暖白色从右上方
+  const keyLight = new THREE.DirectionalLight(0xfff5e6, 2.5);
+  keyLight.position.set(4, 6, 3);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  keyLight.shadow.camera.near = 1;
+  keyLight.shadow.camera.far = 20;
+  keyLight.shadow.camera.left = -4;
+  keyLight.shadow.camera.right = 4;
+  keyLight.shadow.camera.top = 4;
+  keyLight.shadow.camera.bottom = -4;
+  keyLight.shadow.bias = -0.001;
+  scene.add(keyLight);
+
+  // 补光 (Fill Light) — 冷色从左侧
+  const fillLight = new THREE.DirectionalLight(0x8ec8ff, 1.0);
+  fillLight.position.set(-5, 3, -1);
+  scene.add(fillLight);
+
+  // 轮廓光 (Rim Light) — 从后方打出轮廓
+  const rimLight = new THREE.DirectionalLight(0xa78bfa, 1.8);
+  rimLight.position.set(-1, 4, -5);
+  scene.add(rimLight);
+
+  // 底部微弱补光 / Subtle bottom fill
+  const bottomFill = new THREE.PointLight(0x6c8cff, 0.5, 10);
+  bottomFill.position.set(0, -1, 2);
+  scene.add(bottomFill);
+}
+
+// ================================================================
+// 构建耳机模型 / Build Headphone Model from Primitives
+// ================================================================
+function buildHeadphones() {
+  productGroup = new THREE.Group();
+
+  // 主材质（可换色）/ Main material (color-swappable)
+  const mainMat = new THREE.MeshPhysicalMaterial({
+    color: currentColor,
+    metalness: 0.3,
+    roughness: 0.35,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.2,
+  });
+  productMaterials.push(mainMat);
+
+  // 金属装饰材质 / Metallic accent material
+  const accentMat = new THREE.MeshPhysicalMaterial({
+    color: 0x888899,
+    metalness: 0.9,
+    roughness: 0.15,
+    clearcoat: 1.0,
+  });
+
+  // 耳垫材质 (柔软) / Ear pad material (soft look)
+  const padMat = new THREE.MeshPhysicalMaterial({
+    color: 0x1a1a22,
+    metalness: 0.0,
+    roughness: 0.85,
+    sheen: 0.5,
+    sheenColor: new THREE.Color(0x333344),
+  });
+
+  // -- 头梁 / Headband --
+  // 使用 TorusGeometry 的一段弧线来模拟头梁
+  const headbandGeo = new THREE.TorusGeometry(1.35, 0.07, 16, 48, Math.PI);
+  const headband = new THREE.Mesh(headbandGeo, accentMat);
+  headband.rotation.z = 0;
+  headband.position.y = 0.2;
+  headband.castShadow = true;
+  productGroup.add(headband);
+
+  // 头梁顶部软垫 / Headband cushion on top
+  const cushionGeo = new THREE.TorusGeometry(1.32, 0.09, 8, 48, Math.PI * 0.7);
+  const cushion = new THREE.Mesh(cushionGeo, padMat);
+  cushion.rotation.z = 0;
+  cushion.position.y = 0.2;
+  cushion.rotation.y = Math.PI * 0.15;
+  productGroup.add(cushion);
+
+  // -- 左耳罩 / Left Ear Cup --
+  buildEarCup(productGroup, -1.35, 0.15, 0, mainMat, padMat, accentMat);
+  // -- 右耳罩 / Right Ear Cup --
+  buildEarCup(productGroup, 1.35, 0.15, 0, mainMat, padMat, accentMat);
+
+  // -- 连接臂 / Connecting Arms --
+  // 左臂 / Left arm
+  const armGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 12);
+  const leftArm = new THREE.Mesh(armGeo, accentMat);
+  leftArm.position.set(-1.35, 0.85, 0);
+  leftArm.castShadow = true;
+  productGroup.add(leftArm);
+
+  // 右臂 / Right arm
+  const rightArm = new THREE.Mesh(armGeo, accentMat);
+  rightArm.position.set(1.35, 0.85, 0);
+  rightArm.castShadow = true;
+  productGroup.add(rightArm);
+
+  // -- 铰链装饰 / Hinge accents --
+  const hingeGeo = new THREE.SphereGeometry(0.08, 16, 16);
+  [-1.35, 1.35].forEach(x => {
+    const hinge = new THREE.Mesh(hingeGeo, accentMat);
+    hinge.position.set(x, 1.18, 0);
+    productGroup.add(hinge);
+  });
+
+  // 整体位置调整 / Adjust overall position
+  productGroup.position.y = 0.3;
+  scene.add(productGroup);
+}
+
+/**
+ * 构建单个耳罩 / Build a single ear cup
+ */
+function buildEarCup(parent, x, y, z, mainMat, padMat, accentMat) {
+  const cupGroup = new THREE.Group();
+  cupGroup.position.set(x, y, z);
+
+  // 外壳 — 扁圆柱 / Outer shell — flat cylinder
+  const shellGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.35, 32);
+  const shell = new THREE.Mesh(shellGeo, mainMat);
+  shell.rotation.z = Math.PI / 2;
+  shell.castShadow = true;
+  shell.receiveShadow = true;
+  cupGroup.add(shell);
+
+  // 外壳圆顶装饰 / Outer dome accent
+  const domeGeo = new THREE.SphereGeometry(0.56, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.35);
+  const dome = new THREE.Mesh(domeGeo, mainMat);
+  dome.rotation.z = x > 0 ? -Math.PI / 2 : Math.PI / 2;
+  dome.position.x = x > 0 ? 0.12 : -0.12;
+  dome.castShadow = true;
+  cupGroup.add(dome);
+
+  // 品牌标志环 / Brand logo ring
+  const logoRingGeo = new THREE.TorusGeometry(0.28, 0.02, 8, 32);
+  const logoRing = new THREE.Mesh(logoRingGeo, accentMat);
+  logoRing.rotation.y = Math.PI / 2;
+  logoRing.position.x = x > 0 ? 0.19 : -0.19;
+  cupGroup.add(logoRing);
+
+  // 耳垫 — 环形 / Ear pad — torus
+  const padGeo = new THREE.TorusGeometry(0.44, 0.13, 16, 32);
+  const pad = new THREE.Mesh(padGeo, padMat);
+  pad.rotation.y = Math.PI / 2;
+  pad.position.x = x > 0 ? -0.18 : 0.18;
+  cupGroup.add(pad);
+
+  // 内部网罩 / Inner mesh grille
+  const grilleGeo = new THREE.CircleGeometry(0.38, 32);
+  const grilleMat = new THREE.MeshPhysicalMaterial({
+    color: 0x111118,
+    metalness: 0.5,
+    roughness: 0.6,
+    side: THREE.DoubleSide,
+  });
+  const grille = new THREE.Mesh(grilleGeo, grilleMat);
+  grille.rotation.y = x > 0 ? -Math.PI / 2 : Math.PI / 2;
+  grille.position.x = x > 0 ? -0.17 : 0.17;
+  cupGroup.add(grille);
+
+  parent.add(cupGroup);
+}
+
+// ================================================================
+// 地面 / Ground Plane
+// ================================================================
+function buildGround() {
+  // 反射地面 / Reflective ground
+  const groundGeo = new THREE.CircleGeometry(8, 64);
+  const groundMat = new THREE.MeshPhysicalMaterial({
+    color: 0x0a0a14,
+    metalness: 0.6,
+    roughness: 0.25,
+    transparent: true,
+    opacity: 0.8,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.55;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // 网格辅助装饰 / Subtle grid lines for visual depth
+  const gridHelper = new THREE.GridHelper(16, 40, 0x1a1a2e, 0x1a1a2e);
+  gridHelper.position.y = -0.54;
+  gridHelper.material.opacity = 0.25;
+  gridHelper.material.transparent = true;
+  scene.add(gridHelper);
+}
+
+// ================================================================
+// 热点标记 / Hotspot Markers
+// ================================================================
+function buildHotspots() {
+  const markerGeo = new THREE.SphereGeometry(0.06, 16, 16);
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0x6c8cff });
+
+  // 外环发光 / Outer glow ring
+  const ringGeo = new THREE.TorusGeometry(0.1, 0.015, 8, 32);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x6c8cff, transparent: true, opacity: 0.5 });
+
+  hotspotData.forEach((data, i) => {
+    const group = new THREE.Group();
+    group.position.set(...data.pos);
+    group.userData = { hotspotIndex: i };
+
+    const marker = new THREE.Mesh(markerGeo, markerMat.clone());
+    group.add(marker);
+
+    const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+    group.add(ring);
+
+    productGroup.add(group);
+    hotspotMeshes.push(group);
+  });
+}
+
+// ================================================================
+// 配置器交互 / Configurator Interactions
+// ================================================================
+function setupConfigurator() {
+  // -- 颜色切换 / Color Swatches --
+  document.querySelectorAll('.swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      const newColor = new THREE.Color(swatch.dataset.color);
+      // 使用GSAP动画过渡颜色 / Animate color transition with GSAP
+      const proxy = { r: currentColor.r, g: currentColor.g, b: currentColor.b };
+      gsap.to(proxy, {
+        r: newColor.r, g: newColor.g, b: newColor.b,
+        duration: 0.8, ease: 'power2.inOut',
+        onUpdate: () => {
+          currentColor.setRGB(proxy.r, proxy.g, proxy.b);
+          productMaterials.forEach(m => m.color.copy(currentColor));
+        }
+      });
+    });
+  });
+
+  // -- 材质切换 / Material Switcher --
+  document.querySelectorAll('.mat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyMaterialPreset(btn.dataset.mat);
+    });
+  });
+}
+
+/**
+ * 应用材质预设 / Apply material preset
+ */
+function applyMaterialPreset(preset) {
+  const targets = {
+    matte:    { metalness: 0.05, roughness: 0.85, clearcoat: 0.0, clearcoatRoughness: 0.5 },
+    glossy:   { metalness: 0.3,  roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2 },
+    metallic: { metalness: 0.95, roughness: 0.12, clearcoat: 1.0, clearcoatRoughness: 0.05 },
+  };
+  const t = targets[preset];
+  productMaterials.forEach(mat => {
+    gsap.to(mat, {
+      metalness: t.metalness,
+      roughness: t.roughness,
+      clearcoat: t.clearcoat,
+      clearcoatRoughness: t.clearcoatRoughness,
+      duration: 0.8, ease: 'power2.inOut',
+    });
+  });
+}
+
+// ================================================================
+// 鼠标交互 / Mouse Interaction (Raycaster)
+// ================================================================
+function onClick(e) {
+  updateMouse(e);
+  raycaster.setFromCamera(mouse, camera);
+
+  // 检测热点点击 / Check hotspot clicks
+  const allMarkers = [];
+  hotspotMeshes.forEach(g => g.traverse(c => { if (c.isMesh) allMarkers.push(c); }));
+  const hits = raycaster.intersectObjects(allMarkers, false);
+
+  if (hits.length > 0) {
+    let group = hits[0].object;
+    while (group.parent && group.userData.hotspotIndex === undefined) group = group.parent;
+    if (group.userData.hotspotIndex !== undefined) {
+      const data = hotspotData[group.userData.hotspotIndex];
+      showTooltip(e.clientX, e.clientY, data.title, data.body);
+      // 平滑相机过渡 / Smooth camera transition to hotspot
+      const target = new THREE.Vector3(...data.pos).add(productGroup.position);
+      gsap.to(controls.target, {
+        x: target.x, y: target.y, z: target.z,
+        duration: 1.0, ease: 'power2.inOut',
+      });
+    }
+  } else {
+    hideTooltip();
+  }
+}
+
+function onMouseMove(e) {
+  updateMouse(e);
+}
+
+function updateMouse(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+}
+
+function showTooltip(x, y, title, body) {
+  tooltip.querySelector('.tt-title').textContent = title;
+  tooltip.querySelector('.tt-body').textContent = body;
+  tooltip.style.left = Math.min(x + 16, window.innerWidth - 240) + 'px';
+  tooltip.style.top = Math.min(y - 20, window.innerHeight - 120) + 'px';
+  tooltip.style.opacity = '1';
+}
+
+function hideTooltip() {
+  tooltip.style.opacity = '0';
+}
+
+// ================================================================
+// 窗口尺寸调整 / Resize Handler
+// ================================================================
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ================================================================
+// 动画循环 / Animation Loop
+// ================================================================
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // 热点脉冲动画 / Hotspot pulse animation
+  hotspotMeshes.forEach((group, i) => {
+    const scale = 1 + 0.2 * Math.sin(t * 3 + i * 1.5);
+    group.scale.setScalar(scale);
+    // 外环旋转 / Ring rotation
+    if (group.children[1]) group.children[1].rotation.x = t * 1.5 + i;
+  });
+
+  // 产品微微浮动 / Subtle product float
+  if (productGroup) {
+    productGroup.position.y = 0.3 + Math.sin(t * 0.8) * 0.04;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

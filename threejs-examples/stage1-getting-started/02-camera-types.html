@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>相机对比 / Camera Comparison - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 14px 18px; border-radius: 8px;
+      font-size: 14px; line-height: 1.6; max-width: 360px;
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+    /* 分隔线标签 / Divider labels */
+    .cam-label {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      color: #fff; font-size: 13px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 6px 12px; border-radius: 4px;
+    }
+    #label-left { left: 15%; }
+    #label-right { right: 15%; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>相机对比 / Camera Comparison</h2>
+    <p><b>左 / Left:</b> PerspectiveCamera 透视相机 — 近大远小</p>
+    <p><b>右 / Right:</b> OrthographicCamera 正交相机 — 无透视变形</p>
+    <p>注意远处物体的大小差异！</p>
+  </div>
+  <div class="cam-label" id="label-left">Perspective 透视</div>
+  <div class="cam-label" id="label-right">Orthographic 正交</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 相机类型对比：透视相机 vs 正交相机
+    // Camera comparison: Perspective vs Orthographic
+    // ============================================================
+    import * as THREE from 'three';
+
+    // --- 两个渲染器，各占半屏 / Two renderers, each half screen ---
+    const halfW = () => Math.floor(window.innerWidth / 2);
+    const fullH = () => window.innerHeight;
+
+    const rendererLeft = new THREE.WebGLRenderer({ antialias: true });
+    rendererLeft.setPixelRatio(window.devicePixelRatio);
+    rendererLeft.setSize(halfW(), fullH());
+    rendererLeft.domElement.style.position = 'absolute';
+    rendererLeft.domElement.style.left = '0';
+    rendererLeft.domElement.style.top = '0';
+    document.body.appendChild(rendererLeft.domElement);
+
+    const rendererRight = new THREE.WebGLRenderer({ antialias: true });
+    rendererRight.setPixelRatio(window.devicePixelRatio);
+    rendererRight.setSize(halfW(), fullH());
+    rendererRight.domElement.style.position = 'absolute';
+    rendererRight.domElement.style.right = '0';
+    rendererRight.domElement.style.top = '0';
+    document.body.appendChild(rendererRight.domElement);
+
+    // --- 共享场景 / Shared scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x16213e);
+
+    // --- 创建多个几何物体 / Create multiple objects ---
+    const objects = [];
+    const colors = [0xe74c3c, 0x2ecc71, 0x3498db, 0xf39c12, 0x9b59b6, 0x1abc9c];
+    const geos = [
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.SphereGeometry(0.6, 32, 32),
+      new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32),
+      new THREE.TorusGeometry(0.5, 0.2, 16, 48),
+      new THREE.ConeGeometry(0.5, 1.2, 32),
+      new THREE.DodecahedronGeometry(0.6),
+    ];
+
+    // 摆放物体，前后左右都有 / Place objects at various depths
+    const positions = [
+      [0, 0, 0], [2, 0, -3], [-2, 0, -2],
+      [1, 0, 2], [-1.5, 0, -5], [2.5, 0, 1]
+    ];
+
+    geos.forEach((geo, i) => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: colors[i], metalness: 0.2, roughness: 0.5
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(...positions[i]);
+      scene.add(mesh);
+      objects.push(mesh);
+    });
+
+    // --- 灯光 / Lights ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(5, 8, 5);
+    scene.add(dirLight);
+
+    // 地面网格 / Ground grid
+    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+    grid.position.y = -1;
+    scene.add(grid);
+
+    // --- 左侧：透视相机 / Left: PerspectiveCamera ---
+    const perspCamera = new THREE.PerspectiveCamera(50, halfW() / fullH(), 0.1, 100);
+    perspCamera.position.set(0, 4, 8);
+    perspCamera.lookAt(0, 0, -1);
+
+    // --- 右侧：正交相机 / Right: OrthographicCamera ---
+    // 正交相机参数：left, right, top, bottom, near, far
+    const frustumSize = 8;
+    const aspect = halfW() / fullH();
+    const orthoCamera = new THREE.OrthographicCamera(
+      -frustumSize * aspect / 2, frustumSize * aspect / 2,
+      frustumSize / 2, -frustumSize / 2,
+      0.1, 100
+    );
+    orthoCamera.position.set(0, 4, 8);
+    orthoCamera.lookAt(0, 0, -1);
+
+    // --- 响应窗口变化 / Resize handler ---
+    window.addEventListener('resize', () => {
+      const w = halfW(), h = fullH();
+      // 透视相机
+      perspCamera.aspect = w / h;
+      perspCamera.updateProjectionMatrix();
+      rendererLeft.setSize(w, h);
+      // 正交相机
+      const a = w / h;
+      orthoCamera.left = -frustumSize * a / 2;
+      orthoCamera.right = frustumSize * a / 2;
+      orthoCamera.updateProjectionMatrix();
+      rendererRight.setSize(w, h);
+    });
+
+    // --- 动画循环 / Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      // 旋转所有物体 / Rotate all objects
+      objects.forEach((obj, i) => {
+        obj.rotation.x += 0.005 + i * 0.001;
+        obj.rotation.y += 0.008 + i * 0.001;
+      });
+      // 左右分别渲染 / Render each half
+      rendererLeft.render(scene, perspCamera);
+      rendererRight.render(scene, orthoCamera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>

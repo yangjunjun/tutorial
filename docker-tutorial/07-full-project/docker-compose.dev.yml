@@ -1,0 +1,125 @@
+# =============================================================================
+# 开发环境覆盖配置
+# =============================================================================
+# 用法：
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# 本文件会覆盖 docker-compose.yml 中的同名配置，
+# 为开发环境提供：代码热重载、调试端口、宽松的资源限制。
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 数据库（开发环境）
+  # ---------------------------------------------------------------------------
+  db:
+    environment:
+      POSTGRES_DB: fullstack_dev
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpassword
+    ports:
+      - "5432:5432"   # 开发环境暴露到所有地址，方便本地工具连接
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis（开发环境）
+  # ---------------------------------------------------------------------------
+  redis:
+    command: >
+      redis-server
+      --requirepass devredis
+      --loglevel verbose
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # 后端 API（开发环境 - 热重载 + 调试）
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    image: fullstack-backend:dev
+    container_name: fullstack-backend-dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: fullstack_dev
+      DB_USER: devuser
+      DB_PASSWORD: devpassword
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: devredis
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      LOG_LEVEL: debug
+    volumes:
+      - ./backend/src:/app/src:cached            # 绑定挂载源代码（热重载）
+      - ./backend/package.json:/app/package.json  # 同步 package.json
+      - /app/node_modules                         # 排除 node_modules（使用容器内版本）
+    ports:
+      - "3000:3000"     # 直接访问后端（调试用）
+      - "9229:9229"     # Node.js Inspector 调试端口
+    command: >
+      sh -c "npm install && npx nodemon --inspect=0.0.0.0:9229 src/app.js"
+    deploy:
+      resources: {}   # 开发环境不限制资源
+    restart: "no"     # 开发环境不自动重启
+
+  # ---------------------------------------------------------------------------
+  # 前端（开发环境 - 热重载）
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    image: fullstack-frontend:dev
+    container_name: fullstack-frontend-dev
+    environment:
+      REACT_APP_API_URL: /api
+      CHOKIDAR_USEPOLLING: "true"    # Docker 内文件监听兼容
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend/src:/app/src:cached          # 绑定挂载源代码
+      - ./frontend/public:/app/public:cached    # 绑定挂载 public 目录
+      - /app/node_modules                        # 排除 node_modules
+    ports:
+      - "3001:3000"   # 直接访问前端开发服务器
+    command: npm start
+    deploy:
+      resources: {}
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s   # 开发构建较慢，延长启动期
+
+  # ---------------------------------------------------------------------------
+  # Nginx（开发环境 - 简化配置，无 SSL）
+  # ---------------------------------------------------------------------------
+  nginx:
+    ports:
+      - "80:80"
+      # 不暴露 443（开发环境不使用 SSL）
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    deploy:
+      resources: {}
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s

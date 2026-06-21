@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 - 半球光 / HemisphereLight</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.75); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.6; max-width: 340px;
+      pointer-events: auto; z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .ctrl-group { margin-top: 8px; }
+    .ctrl-group label { display: block; margin-bottom: 4px; font-size: 12px; color: #aaa; }
+    .color-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .color-row span { font-size: 12px; min-width: 80px; }
+    input[type="color"] { width: 50px; height: 28px; border: none; cursor: pointer; border-radius: 4px; }
+    input[type="range"] { width: 100%; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .btn {
+      padding: 4px 10px; border: 1px solid #555; border-radius: 4px;
+      background: #333; color: #fff; cursor: pointer; font-size: 12px;
+    }
+    .btn:hover { background: #555; }
+    .btn.active { border-color: #4fc3f7; background: #1a3a4a; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>半球光 / HemisphereLight</h2>
+    <p>半球光模拟天空和地面的环境光。上方使用天空色，下方使用地面色。<br>
+       HemisphereLight simulates sky + ground ambient light. Top faces get sky color, bottom faces get ground color.</p>
+    <p style="color:#ffeb3b;">与 AmbientLight 对比：半球光提供了更自然的色彩过渡。<br>
+       Compared to AmbientLight: hemisphere light provides more natural color transitions.</p>
+
+    <div class="ctrl-group">
+      <label>预设 / Presets:</label>
+      <div class="btn-row">
+        <button class="btn active" onclick="setPreset('#87ceeb','#3a5f0b',0.6)">户外/Outdoor</button>
+        <button class="btn" onclick="setPreset('#ffd4a0','#553322',0.5)">日落/Sunset</button>
+        <button class="btn" onclick="setPreset('#1a1a40','#0a0a20',0.3)">夜晚/Night</button>
+        <button class="btn" onclick="setPreset('#ffffff','#444444',0.5)">室内/Indoor</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="color-row">
+        <span>天空色/Sky:</span>
+        <input type="color" id="skyColor" value="#87ceeb">
+      </div>
+      <div class="color-row">
+        <span>地面色/Ground:</span>
+        <input type="color" id="groundColor" value="#3a5f0b">
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>强度 / Intensity: <span id="intVal" style="color:#4fc3f7;">0.6</span></label>
+      <input type="range" id="intSlider" min="0" max="2" step="0.05" value="0.6">
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础场景 / Basic scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(6, 4, 7);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // ===== 半球光 / Hemisphere Light =====
+    // 天空色 + 地面色 / Sky color + ground color
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3a5f0b, 0.6);
+    scene.add(hemiLight);
+
+    // ===== 户外场景物体 / Outdoor-like scene objects =====
+    // 草地地面 / Grassy ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x4a7c3f, roughness: 0.9 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // "树木" - 圆柱 + 球体 / "Trees" - cylinder + sphere
+    function makeTree(x, z) {
+      const group = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.2, 1.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.8 })
+      );
+      trunk.position.y = 0.75;
+      group.add(trunk);
+
+      const foliage = new THREE.Mesh(
+        new THREE.SphereGeometry(0.8, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0x2d8a4e, roughness: 0.7 })
+      );
+      foliage.position.y = 2;
+      group.add(foliage);
+
+      group.position.set(x, 0, z);
+      scene.add(group);
+      return group;
+    }
+    makeTree(-3, -2);
+    makeTree(2, -3);
+    makeTree(4, 1);
+
+    // 石头 / Rocks
+    function makeRock(x, z, s) {
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(s),
+        new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 })
+      );
+      rock.position.set(x, s * 0.5, z);
+      rock.rotation.set(Math.random(), Math.random(), 0);
+      scene.add(rock);
+    }
+    makeRock(-1, 1, 0.4);
+    makeRock(1, -1, 0.3);
+    makeRock(-2, -1, 0.5);
+    makeRock(3, 2, 0.35);
+
+    // 白色球体展示光照 / White sphere to show lighting
+    const whiteSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+    );
+    whiteSphere.position.set(0, 0.8, 0);
+    scene.add(whiteSphere);
+
+    // 彩色立方体 / Colored cubes
+    const colors = [0xe74c3c, 0x3498db, 0xf1c40f];
+    colors.forEach((c, i) => {
+      const cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.6, 0.6),
+        new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 })
+      );
+      cube.position.set(-1.5 + i * 1.5, 0.3, 3);
+      cube.rotation.y = Math.PI / 6;
+      scene.add(cube);
+    });
+
+    // ===== UI 控制 / UI controls =====
+    const skyInput = document.getElementById('skyColor');
+    const groundInput = document.getElementById('groundColor');
+    const intSlider = document.getElementById('intSlider');
+    const intVal = document.getElementById('intVal');
+
+    function updateFromInputs() {
+      hemiLight.color.set(skyInput.value);
+      hemiLight.groundColor.set(groundInput.value);
+    }
+    skyInput.addEventListener('input', updateFromInputs);
+    groundInput.addEventListener('input', updateFromInputs);
+
+    intSlider.addEventListener('input', () => {
+      hemiLight.intensity = parseFloat(intSlider.value);
+      intVal.textContent = parseFloat(intSlider.value).toFixed(2);
+    });
+
+    // 预设 / Presets
+    window.setPreset = function(sky, ground, intensity) {
+      skyInput.value = sky;
+      groundInput.value = ground;
+      intSlider.value = intensity;
+      hemiLight.color.set(sky);
+      hemiLight.groundColor.set(ground);
+      hemiLight.intensity = intensity;
+      intVal.textContent = intensity.toFixed(2);
+      // 更新背景色 / Update background
+      scene.background.set(sky);
+      document.querySelectorAll('.btn-row .btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    };
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

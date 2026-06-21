@@ -1,0 +1,77 @@
+// Prisma Schema 文件
+//
+// 这是 Prisma 的数据模型定义文件，使用 Prisma Schema Language (PSL)。
+// Prisma 会根据这个文件：
+// 1. 生成数据库迁移 SQL
+// 2. 生成 TypeScript 类型安全的 Prisma Client
+//
+// 语法说明：
+// - generator: 定义代码生成器（通常是 prisma-client-js）
+// - datasource: 定义数据库连接
+// - model: 定义数据表（映射到数据库表）
+
+// =====================================================
+// 代码生成器配置
+// =====================================================
+// provider: "prisma-client-js" 表示生成 JavaScript/TypeScript 客户端
+// 运行 `npx prisma generate` 后会在 node_modules/.prisma/client 生成代码
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =====================================================
+// 数据源配置
+// =====================================================
+// 使用 SQLite 数据库，文件存储在 prisma/dev.db
+// SQLite 是最简单的选择，不需要安装额外的数据库服务器
+// 生产环境通常会切换到 PostgreSQL 或 MySQL
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// =====================================================
+// 数据模型定义
+// =====================================================
+
+// 商品分类模型
+//
+// 一个分类可以包含多个商品（一对多关系）
+//
+// Prisma 字段类型：Int, String, Float, Boolean, DateTime
+//
+// 字段属性：
+// @id                   - 主键
+// @default(value)       - 默认值
+// @unique               - 唯一约束
+// @relation()           - 关联关系
+// @updatedAt            - 自动更新时间戳
+// @map("column_name")   - 映射到不同的列名
+// @db.VarChar(255)      - 指定数据库原生类型
+model Category {
+  id        Int       @id @default(autoincrement())  // 自增主键
+  name      String    @unique                         // 分类名称（唯一）
+  createdAt DateTime  @default(now())                 // 创建时间（默认当前时间）
+  products  Product[]                                 // 关联的商品列表
+}
+
+// 商品模型
+//
+// 属于一个分类（多对一关系）
+//
+// 关联关系说明：
+// category Category @relation(fields: [categoryId], references: [id])
+//   - 定义外键关系：categoryId 指向 Category 的 id
+// categoryId Int
+//   - 外键字段，存储在数据库中
+model Product {
+  id          Int       @id @default(autoincrement())  // 自增主键
+  name        String                                    // 商品名称
+  description String?                                   // 商品描述（可选，? 表示 nullable）
+  price       Float                                     // 商品价格
+  stock       Int       @default(0)                     // 库存（默认 0）
+  createdAt   DateTime  @default(now())                 // 创建时间
+  updatedAt   DateTime  @updatedAt                      // 更新时间（自动更新）
+  category    Category  @relation(fields: [categoryId], references: [id])  // 关联分类
+  categoryId  Int                                       // 分类 ID（外键）
+}

@@ -1,0 +1,90 @@
+// Prisma Schema 定义
+// 学习点：如何设计一个完整的电商订单系统数据模型
+// 包含：用户、商品、订单、订单项、支付、收货地址
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 用户模型 - 包含余额字段用于模拟支付扣款
+model User {
+  id        Int       @id @default(autoincrement())
+  username  String    @unique
+  password  String
+  email     String
+  balance   Float     @default(0)
+  createdAt DateTime  @default(now())
+  orders    Order[]
+}
+
+// 商品模型 - 包含库存管理
+model Product {
+  id          Int       @id @default(autoincrement())
+  name        String
+  price       Float
+  stock       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  orderItems  OrderItem[]
+}
+
+// 订单模型 - 核心业务实体
+// 状态流转：PENDING -> PAID -> SHIPPED -> COMPLETED
+//          PENDING -> CANCELLED（超时或用户取消）
+//          PAID -> CANCELLED（退款）
+model Order {
+  id            Int         @id @default(autoincrement())
+  orderNo       String      @unique
+  status        String      @default("PENDING")  // PENDING, PAID, SHIPPED, COMPLETED, CANCELLED
+  totalAmount   Float
+  userId        Int
+  user          User        @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+  payment       Payment?
+  shippingAddr  ShippingAddress?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+// 订单项 - 订单与商品的多对多关系表
+// 记录下单时的快照价格（unitPrice），防止商品价格变动影响历史订单
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  quantity  Int
+  unitPrice Float
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// 支付记录 - 与订单一对一关联
+// 状态：PENDING -> SUCCESS / FAILED
+// paymentNo 用于对接第三方支付系统的唯一标识
+model Payment {
+  id            Int      @id @default(autoincrement())
+  paymentNo     String   @unique
+  amount        Float
+  status        String   @default("PENDING")  // PENDING, SUCCESS, FAILED
+  method        String   @default("SIMULATED")
+  paidAt        DateTime?
+  orderId       Int      @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+// 收货地址 - 与订单一对一关联
+// 设计为独立表而非用户属性，因为同一用户不同订单可能寄到不同地址
+model ShippingAddress {
+  id       Int    @id @default(autoincrement())
+  name     String
+  phone    String
+  address  String
+  orderId  Int    @unique
+  order    Order  @relation(fields: [orderId], references: [id])
+}

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>顶点着色器 / Vertex Shader</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a1a; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.85); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 380px; font-size: 13px; line-height: 1.5;
+            z-index: 10; max-height: 90vh; overflow-y: auto;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #8fc; }
+        .mode-btn {
+            display: inline-block; padding: 5px 12px; margin: 4px 4px 0 0;
+            border: 1px solid #8fc; background: transparent; color: #8fc;
+            border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active { background: #8fc; color: #000; }
+        .slider-group { margin: 6px 0; }
+        .slider-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 2px; }
+        .slider-group input[type=range] {
+            width: 100%; height: 4px; -webkit-appearance: none;
+            background: #444; border-radius: 2px; outline: none;
+        }
+        .slider-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: #8fc; border-radius: 50%; cursor: pointer;
+        }
+        .val { float: right; color: #8fc; font-family: monospace; }
+        .code-block {
+            background: rgba(0,0,0,0.5); padding: 6px 8px; margin: 4px 0;
+            border-radius: 4px; font-family: 'Courier New', monospace; font-size: 10px;
+            color: #8f8; border-left: 3px solid #8fc; line-height: 1.3;
+            white-space: pre-wrap; max-height: 200px; overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>顶点着色器 / Vertex Shader</h2>
+    <p>通过自定义顶点着色器，可以在 GPU 上实时变形网格。position 属性被着色器修改以创建各种效果。</p>
+    <p style="color:#888;">Custom vertex shaders deform meshes on the GPU in real-time.</p>
+    <div style="margin-top:8px;">
+        <button class="mode-btn active" data-mode="sine">正弦波 Sine</button>
+        <button class="mode-btn" data-mode="noise">地形 Terrain</button>
+        <button class="mode-btn" data-mode="breathe">呼吸 Breathe</button>
+        <button class="mode-btn" data-mode="twist">扭曲 Twist</button>
+    </div>
+    <div class="slider-group">
+        <label>振幅 Amplitude <span class="val" id="vAmplitude">0.50</span></label>
+        <input type="range" id="amplitude" min="0.1" max="2.0" step="0.01" value="0.5">
+    </div>
+    <div class="slider-group">
+        <label>频率 Frequency <span class="val" id="vFrequency">3.00</span></label>
+        <input type="range" id="frequency" min="1" max="10" step="0.1" value="3.0">
+    </div>
+    <div id="codePanel" class="code-block"></div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a1a);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(5, 5, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ============ 灯光 / Lighting ============
+scene.add(new THREE.AmbientLight(0x404060, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(5, 8, 5);
+scene.add(dirLight);
+
+// ============ 顶点着色器定义 / Vertex Shader Definitions ============
+
+// 通用片元着色器 - 基于法线着色 / Common fragment shader - normal-based coloring
+const fragmentShader = /* glsl */`
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    void main() {
+        // 基于法线和位置的颜色混合 / Color blend based on normal and position
+        vec3 color = vec3(0.3, 0.6, 0.9) * (vNormal.y * 0.5 + 0.5)
+                   + vec3(0.9, 0.4, 0.2) * (1.0 - vNormal.y * 0.5 - 0.5);
+        // 简单光照 / Simple lighting
+        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+        float diff = max(dot(vNormal, lightDir), 0.0) * 0.6 + 0.4;
+        gl_FragColor = vec4(color * diff, 1.0);
+    }
+`;
+
+// 1. 正弦波变形 - Y轴正弦波
+// 1. Sine wave displacement - Y-axis sine wave
+const sineVertexShader = /* glsl */`
+    uniform float uTime;
+    uniform float uAmplitude;
+    uniform float uFrequency;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    void main() {
+        vec3 pos = position;
+        // 沿Y轴施加正弦波位移 / Apply sine wave displacement along Y
+        float wave = sin(pos.x * uFrequency + uTime * 2.0) * uAmplitude;
+        wave += sin(pos.z * uFrequency * 0.8 + uTime * 1.5) * uAmplitude * 0.5;
+        pos.y += wave;
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = pos;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+`;
+
+// 2. 噪声地形 - 伪噪声位移
+// 2. Noise terrain - pseudo-noise displacement
+const noiseVertexShader = /* glsl */`
+    uniform float uTime;
+    uniform float uAmplitude;
+    uniform float uFrequency;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    // 简单的伪噪声函数 / Simple pseudo-noise function
+    float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f); // smoothstep
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    void main() {
+        vec3 pos = position;
+        // 多层噪声叠加 / Multiple octaves of noise
+        float n = noise(pos.xz * uFrequency + uTime * 0.3) * uAmplitude;
+        n += noise(pos.xz * uFrequency * 2.0 + uTime * 0.5) * uAmplitude * 0.5;
+        n += noise(pos.xz * uFrequency * 4.0) * uAmplitude * 0.25;
+        pos.y += n;
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = pos;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+`;
+
+// 3. 呼吸/脉动效果
+// 3. Breathing/pulse effect
+const breatheVertexShader = /* glsl */`
+    uniform float uTime;
+    uniform float uAmplitude;
+    uniform float uFrequency;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    void main() {
+        vec3 pos = position;
+        // 沿法线方向脉动 / Pulse along normal direction
+        float pulse = sin(uTime * uFrequency) * uAmplitude;
+        // 不同部位不同相位 / Different phases for different parts
+        float offset = sin(pos.y * 3.0 + uTime * 2.0) * uAmplitude * 0.5;
+        pos += normal * (pulse + offset);
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = pos;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+`;
+
+// 4. 扭曲变形
+// 4. Twist deformation
+const twistVertexShader = /* glsl */`
+    uniform float uTime;
+    uniform float uAmplitude;
+    uniform float uFrequency;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    void main() {
+        vec3 pos = position;
+        // 基于Y轴的扭曲 / Twist based on Y axis
+        float angle = pos.y * uFrequency * 0.5 + uTime;
+        float s = sin(angle * uAmplitude);
+        float c = cos(angle * uAmplitude);
+        // 旋转XZ平面 / Rotate XZ plane
+        pos.xz = mat2(c, -s, s, c) * pos.xz;
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = pos;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+`;
+
+// 着色器集合 / Shader collection
+const shaderModes = {
+    sine: { vertex: sineVertexShader, name: '正弦波 Sine Wave' },
+    noise: { vertex: noiseVertexShader, name: '地形 Terrain' },
+    breathe: { vertex: breatheVertexShader, name: '呼吸 Breathe' },
+    twist: { vertex: twistVertexShader, name: '扭曲 Twist' }
+};
+
+// ============ 创建网格 / Create Mesh ============
+// 高分辨率平面（用于正弦波和地形）/ High-res plane (for sine and terrain)
+const planeGeo = new THREE.PlaneGeometry(8, 8, 128, 128);
+planeGeo.rotateX(-Math.PI / 2);
+
+// 高分辨率球体（用于呼吸和扭曲）/ High-res sphere (for breathe and twist)
+const sphereGeo = new THREE.SphereGeometry(2, 64, 64);
+
+// 创建初始材质 / Create initial material
+const uniforms = {
+    uTime: { value: 0.0 },
+    uAmplitude: { value: 0.5 },
+    uFrequency: { value: 3.0 }
+};
+
+let currentMode = 'sine';
+const material = new THREE.ShaderMaterial({
+    vertexShader: sineVertexShader,
+    fragmentShader: fragmentShader,
+    uniforms: uniforms,
+    side: THREE.DoubleSide
+});
+
+// 初始使用平面 / Start with plane
+let mesh = new THREE.Mesh(planeGeo, material);
+scene.add(mesh);
+
+// 线框覆盖 / Wireframe overlay
+const wireMat = new THREE.MeshBasicMaterial({ color: 0x88ffcc, wireframe: true, transparent: true, opacity: 0.05 });
+let wireframe = new THREE.Mesh(planeGeo, wireMat);
+mesh.add(wireframe);
+
+// ============ 模式切换 / Mode Switching ============
+function switchMode(mode) {
+    currentMode = mode;
+    const shader = shaderModes[mode];
+
+    // 切换几何体 / Switch geometry
+    scene.remove(mesh);
+    const newGeo = (mode === 'breathe' || mode === 'twist') ? sphereGeo : planeGeo;
+    mesh = new THREE.Mesh(newGeo, material);
+    wireframe = new THREE.Mesh(newGeo, wireMat);
+    mesh.add(wireframe);
+    scene.add(mesh);
+
+    // 更新着色器 / Update shader
+    material.vertexShader = shader.vertex;
+    material.needsUpdate = true;
+
+    // 更新代码显示 / Update code display
+    updateCodeDisplay(mode);
+}
+
+function updateCodeDisplay(mode) {
+    const code = shaderModes[mode].vertex;
+    // 简化显示 / Simplified display
+    const shortCode = code.trim().substring(0, 500) + (code.length > 500 ? '\n...' : '');
+    document.getElementById('codePanel').textContent = shortCode;
+}
+
+// ============ UI 事件 / UI Events ============
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        switchMode(btn.dataset.mode);
+    });
+});
+
+document.getElementById('amplitude').addEventListener('input', (e) => {
+    uniforms.uAmplitude.value = parseFloat(e.target.value);
+    document.getElementById('vAmplitude').textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+document.getElementById('frequency').addEventListener('input', (e) => {
+    uniforms.uFrequency.value = parseFloat(e.target.value);
+    document.getElementById('vFrequency').textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+// 初始化代码显示 / Initialize code display
+updateCodeDisplay('sine');
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    uniforms.uTime.value = clock.getElapsedTime();
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

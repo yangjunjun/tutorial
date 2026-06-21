@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>渲染器配置 / Renderer Configuration - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 14px 18px; border-radius: 8px;
+      font-size: 14px; line-height: 1.8; max-width: 380px;
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+    #controls {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    }
+    .btn {
+      background: rgba(0,0,0,0.7); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      transition: all 0.2s; backdrop-filter: blur(6px);
+    }
+    .btn:hover { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
+    .btn.active { background: #4fc3f7; color: #000; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>渲染器配置 / Renderer Configuration</h2>
+    <p>当前色调映射 / Tone Mapping: <span id="toneLabel">None</span></p>
+    <p>抗锯齿 / Antialias: <span id="aaLabel">ON</span></p>
+    <p>曝光度 / Exposure: <span id="expLabel">1.0</span></p>
+    <p style="margin-top:6px;color:#aaa;">点击下方按钮切换设置</p>
+  </div>
+  <div id="controls">
+    <button class="btn" onclick="setToneMapping('none')">None</button>
+    <button class="btn" onclick="setToneMapping('linear')">Linear</button>
+    <button class="btn" onclick="setToneMapping('reinhard')">Reinhard</button>
+    <button class="btn" onclick="setToneMapping('cineon')">Cineon</button>
+    <button class="btn" onclick="setToneMapping('aces')">ACES Filmic</button>
+    <button class="btn" onclick="toggleAA()">Toggle AA</button>
+    <button class="btn" onclick="changeExposure(-0.2)">Exposure -</button>
+    <button class="btn" onclick="changeExposure(0.2)">Exposure +</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 渲染器配置演示：色调映射、抗锯齿、曝光度
+    // Renderer config: tone mapping, antialias, exposure
+    // ============================================================
+    import * as THREE from 'three';
+
+    // --- 场景 / Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    // --- 相机 / Camera ---
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 2, 6);
+    camera.lookAt(0, 0.5, 0);
+
+    // --- 渲染器（初始开启抗锯齿） / Renderer with AA ---
+    let currentAA = true;
+    let renderer = new THREE.WebGLRenderer({ antialias: currentAA });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    // --- 创建场景内容 / Build scene content ---
+    // 一个高反射球体 / A reflective sphere
+    const sphereGeo = new THREE.SphereGeometry(1.5, 64, 64);
+    const sphereMat = new THREE.MeshStandardMaterial({
+      color: 0xff6b6b, metalness: 0.8, roughness: 0.15
+    });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.position.set(0, 1.5, 0);
+    scene.add(sphere);
+
+    // 周围小方块 / Surrounding small cubes
+    const cubeGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(i / 8, 0.7, 0.5),
+        metalness: 0.3, roughness: 0.4
+      });
+      const cube = new THREE.Mesh(cubeGeo, mat);
+      cube.position.set(Math.cos(angle) * 3, 0.5, Math.sin(angle) * 3);
+      scene.add(cube);
+    }
+
+    // 地面 / Ground plane
+    const groundGeo = new THREE.PlaneGeometry(20, 20);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x333355, roughness: 0.8 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // --- 灯光 / Lights ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const pointLight1 = new THREE.PointLight(0xff8844, 30, 20);
+    pointLight1.position.set(3, 4, 2);
+    scene.add(pointLight1);
+    const pointLight2 = new THREE.PointLight(0x4488ff, 20, 20);
+    pointLight2.position.set(-3, 3, -2);
+    scene.add(pointLight2);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(2, 6, 4);
+    scene.add(dirLight);
+
+    // --- 色调映射映射表 / Tone mapping lookup ---
+    const toneMapModes = {
+      none: { mode: THREE.NoToneMapping, label: 'None' },
+      linear: { mode: THREE.LinearToneMapping, label: 'Linear' },
+      reinhard: { mode: THREE.ReinhardToneMapping, label: 'Reinhard' },
+      cineon: { mode: THREE.CineonToneMapping, label: 'Cineon' },
+      aces: { mode: THREE.ACESFilmicToneMapping, label: 'ACES Filmic' },
+    };
+
+    // --- 全局控制函数 / Global control functions ---
+    window.setToneMapping = (key) => {
+      const tm = toneMapModes[key];
+      renderer.toneMapping = tm.mode;
+      // 需要重新编译材质 / Materials need updating
+      scene.traverse((obj) => {
+        if (obj.material) obj.material.needsUpdate = true;
+      });
+      document.getElementById('toneLabel').textContent = tm.label;
+    };
+
+    window.toggleAA = () => {
+      currentAA = !currentAA;
+      // 重建渲染器 / Recreate renderer
+      const oldCanvas = renderer.domElement;
+      renderer.dispose();
+      renderer = new THREE.WebGLRenderer({ antialias: currentAA });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.toneMapping = THREE.NoToneMapping;
+      renderer.toneMappingExposure = parseFloat(document.getElementById('expLabel').textContent);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      oldCanvas.parentNode.replaceChild(renderer.domElement, oldCanvas);
+      document.getElementById('aaLabel').textContent = currentAA ? 'ON' : 'OFF';
+    };
+
+    window.changeExposure = (delta) => {
+      let exp = renderer.toneMappingExposure + delta;
+      exp = Math.max(0.1, Math.min(3.0, exp));
+      renderer.toneMappingExposure = exp;
+      document.getElementById('expLabel').textContent = exp.toFixed(1);
+    };
+
+    // --- 响应窗口变化 / Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 动画循环 / Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      sphere.rotation.y += 0.005;
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

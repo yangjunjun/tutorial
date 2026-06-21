@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>调试面板 / Stats & GUI — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #141420; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+      z-index: 20;
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #55efc4; }
+    #rendererInfo {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #aaa;
+      padding: 10px 14px; border-radius: 8px;
+      font-size: 11px; line-height: 1.5;
+      font-family: 'Consolas', monospace;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+  </style>
+  <!-- Stats.js: FPS计数器 / FPS counter -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script>
+</head>
+<body>
+
+<div id="info">
+  <h2>调试面板 / Stats &amp; GUI</h2>
+  Stats.js FPS + lil-gui 参数控制<br/>
+  使用右侧面板调整场景参数<br/>
+  Use right panel to adjust scene parameters
+</div>
+<div id="rendererInfo"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import GUI from 'lil-gui';
+
+// ── Stats.js FPS面板 / Stats.js FPS panel ──
+const stats = new Stats();
+stats.showPanel(0); // 0=FPS, 1=MS, 2=MB
+stats.dom.style.position = 'absolute';
+stats.dom.style.top = '0px';
+stats.dom.style.left = 'auto';
+stats.dom.style.right = '0px';
+stats.dom.style.zIndex = '100';
+document.body.appendChild(stats.dom);
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x141420);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(5, 4, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+const ambLight = new THREE.AmbientLight(0xffffff, 0.3);
+scene.add(ambLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 8, 5);
+scene.add(dirLight);
+const pointLight = new THREE.PointLight(0x55efc4, 1.5, 15);
+pointLight.position.set(-3, 4, 2);
+scene.add(pointLight);
+
+// ── 场景物体 / Scene objects ──
+const mat1 = new THREE.MeshStandardMaterial({ color: 0x6c5ce7, metalness: 0.3, roughness: 0.4 });
+const mat2 = new THREE.MeshStandardMaterial({ color: 0x55efc4, metalness: 0.4, roughness: 0.3 });
+const mat3 = new THREE.MeshStandardMaterial({ color: 0xfd79a8, metalness: 0.2, roughness: 0.5 });
+
+const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), mat1);
+box.position.set(-2.5, 1, 0);
+scene.add(box);
+
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), mat2);
+sphere.position.set(0, 1.2, 0);
+scene.add(sphere);
+
+const torus = new THREE.Mesh(new THREE.TorusKnotGeometry(0.7, 0.25, 80, 12), mat3);
+torus.position.set(2.5, 1.2, 0);
+scene.add(torus);
+
+// ── 地面 / Ground ──
+const groundGeo = new THREE.PlaneGeometry(30, 30);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.9 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+// ── lil-gui 控制面板 / lil-gui control panel ──
+const params = {
+  // 灯光 / Lights
+  dirLightColor: '#ffffff',
+  dirLightIntensity: 1.2,
+  pointLightColor: '#55efc4',
+  pointLightIntensity: 1.5,
+  ambientIntensity: 0.3,
+  // 旋转速度 / Rotation speed
+  rotationSpeed: 1.0,
+  // 材质属性 / Material properties
+  metalness: 0.3,
+  roughness: 0.4,
+  // 背景色 / Background color
+  bgColor: '#141420',
+  // 线框 / Wireframe
+  wireframe: false,
+};
+
+const gui = new GUI({ title: 'Debug Panel / 调试面板' });
+
+// 灯光文件夹 / Lights folder
+const lightFolder = gui.addFolder('Lights / 灯光');
+lightFolder.addColor(params, 'dirLightColor').name('Dir Color').onChange(v => dirLight.color.set(v));
+lightFolder.add(params, 'dirLightIntensity', 0, 5, 0.1).name('Dir Intensity').onChange(v => dirLight.intensity = v);
+lightFolder.addColor(params, 'pointLightColor').name('Point Color').onChange(v => pointLight.color.set(v));
+lightFolder.add(params, 'pointLightIntensity', 0, 5, 0.1).name('Point Intensity').onChange(v => pointLight.intensity = v);
+lightFolder.add(params, 'ambientIntensity', 0, 2, 0.05).name('Ambient').onChange(v => ambLight.intensity = v);
+
+// 动画文件夹 / Animation folder
+const animFolder = gui.addFolder('Animation / 动画');
+animFolder.add(params, 'rotationSpeed', 0, 5, 0.1).name('Rotation Speed');
+
+// 材质文件夹 / Material folder
+const matFolder = gui.addFolder('Material / 材质');
+matFolder.add(params, 'metalness', 0, 1, 0.01).name('Metalness').onChange(v => {
+  [mat1, mat2, mat3].forEach(m => m.metalness = v);
+});
+matFolder.add(params, 'roughness', 0, 1, 0.01).name('Roughness').onChange(v => {
+  [mat1, mat2, mat3].forEach(m => m.roughness = v);
+});
+matFolder.add(params, 'wireframe').name('Wireframe').onChange(v => {
+  [mat1, mat2, mat3].forEach(m => m.wireframe = v);
+});
+
+// 场景文件夹 / Scene folder
+const sceneFolder = gui.addFolder('Scene / 场景');
+sceneFolder.addColor(params, 'bgColor').name('Background').onChange(v => scene.background.set(v));
+
+// ── renderer.info 显示 / Display renderer.info ──
+const rendererInfoEl = document.getElementById('rendererInfo');
+function updateRendererInfo() {
+  const info = renderer.info;
+  rendererInfoEl.innerHTML =
+    `renderer.info:<br/>` +
+    `  geometries: ${info.memory.geometries}<br/>` +
+    `  textures: ${info.memory.textures}<br/>` +
+    `  draw calls: ${info.render.calls}<br/>` +
+    `  triangles: ${info.render.triangles}<br/>` +
+    `  points: ${info.render.points}<br/>` +
+    `  lines: ${info.render.lines}`;
+}
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  stats.begin(); // 开始FPS计时 / Start FPS timer
+
+  const t = performance.now() * 0.001 * params.rotationSpeed;
+  box.rotation.y = t * 0.5;
+  box.rotation.x = t * 0.3;
+  sphere.rotation.y = t * 0.4;
+  sphere.position.y = 1.2 + Math.sin(t * 2) * 0.3;
+  torus.rotation.x = t * 0.6;
+  torus.rotation.y = t * 0.4;
+
+  ctrl.update();
+  renderer.render(scene, camera);
+
+  stats.end(); // 结束FPS计时 / End FPS timer
+  updateRendererInfo();
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11 - 卡通材质 / MeshToonMaterial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.5; max-width: 340px;
+      pointer-events: auto; z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .ctrl-group { margin-top: 6px; }
+    .ctrl-group label { display: block; margin-bottom: 2px; font-size: 12px; color: #aaa; }
+    input[type="range"] { width: 100%; margin: 2px 0 4px; }
+    .val { color: #4fc3f7; }
+    input[type="color"] { width: 50px; height: 26px; border: none; cursor: pointer; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+    .btn {
+      padding: 3px 8px; border: 1px solid #555; border-radius: 4px;
+      background: #333; color: #fff; cursor: pointer; font-size: 11px;
+    }
+    .btn:hover { background: #555; }
+    .btn.active { border-color: #4fc3f7; background: #1a3a4a; }
+    .section { border-top: 1px solid #333; padding-top: 6px; margin-top: 8px; }
+    /* 标签 / Labels */
+    .mat-label {
+      position: absolute; color: #fff; font-size: 14px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 3px 10px; border-radius: 4px;
+      pointer-events: none; z-index: 5; transform: translate(-50%, -100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="mat-label" id="lbl-toon">卡通材质 / ToonMaterial</div>
+  <div class="mat-label" id="lbl-standard">标准材质 / StandardMaterial</div>
+
+  <div id="info">
+    <h2>卡通材质 / MeshToonMaterial</h2>
+    <p>MeshToonMaterial 实现赛璐珞(cel-shading)效果：阶梯式明暗过渡，像卡通画。<br>
+       MeshToonMaterial creates cel-shading: stepped light transitions, giving a cartoon look.</p>
+    <p style="font-size:12px; color:#ffeb3b;">左侧: 卡通材质 | 右侧: 标准材质对比<br>
+       Left: Toon | Right: Standard for comparison</p>
+
+    <div class="ctrl-group">
+      <label>颜色 / Color: <input type="color" id="colorPicker" value="#ff6688"></label>
+    </div>
+
+    <div class="section">
+      <div class="ctrl-group">
+        <label>渐变图 / Gradient Map:</label>
+        <div class="btn-row">
+          <button class="btn" onclick="setGradient(2)">2阶/2-step</button>
+          <button class="btn active" onclick="setGradient(3)">3阶/3-step</button>
+          <button class="btn" onclick="setGradient(5)">5阶/5-step</button>
+          <button class="btn" onclick="setGradient(0)">平滑/Smooth</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="ctrl-group">
+        <label>光源角度 / Light Angle: <span class="val" id="angleVal">45</span>&deg;</label>
+        <input type="range" id="angleSlider" min="0" max="360" step="5" value="45">
+      </div>
+      <div class="ctrl-group">
+        <label>光源高度 / Light Height: <span class="val" id="heightVal">5</span></label>
+        <input type="range" id="heightSlider" min="1" max="10" step="0.5" value="5">
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础场景 / Basic scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2a2a3e);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 3, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1, 0);
+
+    // ===== 平行光 / Directional light =====
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(3, 5, 3);
+    scene.add(dirLight);
+    scene.add(new THREE.AmbientLight(0x404060, 0.3));
+
+    // ===== 生成渐变贴图 / Generate gradient texture =====
+    // MeshToonMaterial 使用一维梯度图控制明暗阶梯
+    // MeshToonMaterial uses a 1D gradient map to control shading steps
+    function createGradientTexture(steps) {
+      if (steps === 0) {
+        // 平滑渐变（256级）/ Smooth gradient (256 levels)
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 1;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 256, 0);
+        gradient.addColorStop(0, '#000000');
+        gradient.addColorStop(1, '#ffffff');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 256, 1);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        return tex;
+      }
+      // 阶梯渐变 / Stepped gradient
+      const canvas = document.createElement('canvas');
+      canvas.width = steps; canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      for (let i = 0; i < steps; i++) {
+        const v = Math.round((i / (steps - 1)) * 255);
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(i, 0, 1, 1);
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.NearestFilter; // 最近邻过滤保持阶梯效果 / Nearest filter for sharp steps
+      tex.magFilter = THREE.NearestFilter;
+      return tex;
+    }
+
+    // ===== 创建物体 / Create objects =====
+    const sharedColor = 0xff6688;
+    const gradientTex = createGradientTexture(3);
+
+    // 卡通材质 / Toon material
+    const toonMat = new THREE.MeshToonMaterial({ color: sharedColor, gradientMap: gradientTex });
+
+    // 标准材质（对比）/ Standard material (comparison)
+    const stdMat = new THREE.MeshStandardMaterial({ color: sharedColor, roughness: 0.5, metalness: 0 });
+
+    // 左侧：卡通材质球体 / Left: Toon sphere
+    const toonSphere = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), toonMat);
+    toonSphere.position.set(-2, 1.2, 0);
+    scene.add(toonSphere);
+
+    // 右侧：标准材质球体 / Right: Standard sphere
+    const stdSphere = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), stdMat);
+    stdSphere.position.set(2, 1.2, 0);
+    scene.add(stdSphere);
+
+    // 额外的卡通物体 / Additional toon objects
+    const toonCube = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), toonMat.clone());
+    toonCube.material.color.set(0x44aaff);
+    toonCube.position.set(-2, 1.2, -2);
+    scene.add(toonCube);
+
+    const toonKnot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.4, 0.15, 64, 12), toonMat.clone());
+    toonKnot.material.color.set(0x44ff88);
+    toonKnot.position.set(-2, 1.2, 2);
+    scene.add(toonKnot);
+
+    // 地面 / Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(12, 12),
+      new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.8 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // 分割线 / Divider line
+    const dividerGeo = new THREE.PlaneGeometry(0.02, 4);
+    const dividerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const divider = new THREE.Mesh(dividerGeo, dividerMat);
+    divider.position.set(0, 2, 0);
+    scene.add(divider);
+
+    // ===== 标签 / Labels =====
+    const lblToon = document.getElementById('lbl-toon');
+    const lblStd = document.getElementById('lbl-standard');
+
+    function updateLabels() {
+      [
+        { pos: toonSphere.position, label: lblToon },
+        { pos: stdSphere.position, label: lblStd },
+      ].forEach(({ pos, label }) => {
+        const p = pos.clone(); p.y += 1.6;
+        p.project(camera);
+        const x = (p.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-p.y * 0.5 + 0.5) * window.innerHeight;
+        label.style.left = x + 'px';
+        label.style.top = y + 'px';
+        label.style.display = p.z < 1 ? 'block' : 'none';
+      });
+    }
+
+    // ===== UI / UI =====
+    document.getElementById('colorPicker').addEventListener('input', e => {
+      toonMat.color.set(e.target.value);
+      stdMat.color.set(e.target.value);
+    });
+
+    window.setGradient = function(steps) {
+      const tex = createGradientTexture(steps);
+      toonMat.gradientMap = tex;
+      toonMat.needsUpdate = true;
+      // Also update extra toon objects
+      toonCube.material.gradientMap = tex;
+      toonCube.material.needsUpdate = true;
+      toonKnot.material.gradientMap = tex;
+      toonKnot.material.needsUpdate = true;
+      document.querySelectorAll('.btn-row .btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    };
+
+    document.getElementById('angleSlider').addEventListener('input', e => {
+      const angle = parseFloat(e.target.value);
+      document.getElementById('angleVal').textContent = angle;
+      const rad = (angle * Math.PI) / 180;
+      const dist = 6;
+      dirLight.position.x = Math.cos(rad) * dist;
+      dirLight.position.z = Math.sin(rad) * dist;
+    });
+
+    document.getElementById('heightSlider').addEventListener('input', e => {
+      const h = parseFloat(e.target.value);
+      document.getElementById('heightVal').textContent = h.toFixed(1);
+      dirLight.position.y = h;
+    });
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      toonCube.rotation.y += 0.008;
+      toonKnot.rotation.y += 0.01;
+      controls.update();
+      updateLabels();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

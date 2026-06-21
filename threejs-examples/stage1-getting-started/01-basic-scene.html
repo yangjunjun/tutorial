@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第一个场景 / Your First Scene - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    /* 信息面板样式 / Info panel style */
+    #info {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 320px;
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+  </style>
+</head>
+<body>
+  <!-- 信息面板 / Info panel -->
+  <div id="info">
+    <h2>第一个场景 / Your First Scene</h2>
+    <p>Scene + PerspectiveCamera + WebGLRenderer</p>
+    <p>MeshStandardMaterial 彩色立方体</p>
+    <p>AmbientLight + DirectionalLight 灯光</p>
+    <p>AxesHelper 坐标轴辅助线</p>
+  </div>
+
+  <!-- Three.js CDN importmap -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 第一个 Three.js 场景：创建一个旋转的彩色立方体
+    // Your first Three.js scene: a spinning colorful cube
+    // ============================================================
+    import * as THREE from 'three';
+
+    // --- 1. 创建场景 / Create the scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e); // 深蓝背景 / Dark blue background
+
+    // --- 2. 创建相机 / Create the camera ---
+    // PerspectiveCamera(fov, aspect, near, far)
+    // 透视相机：近大远小，模拟人眼效果
+    const camera = new THREE.PerspectiveCamera(
+      60,                                          // 视场角 / Field of view
+      window.innerWidth / window.innerHeight,      // 宽高比 / Aspect ratio
+      0.1,                                         // 近裁剪面 / Near clipping plane
+      1000                                         // 远裁剪面 / Far clipping plane
+    );
+    camera.position.set(3, 2.5, 4); // 相机位置 / Camera position
+    camera.lookAt(0, 0, 0);         // 看向原点 / Look at origin
+
+    // --- 3. 创建渲染器 / Create the renderer ---
+    // WebGLRenderer 负责将场景渲染到 canvas 上
+    const renderer = new THREE.WebGLRenderer({ antialias: true }); // 开启抗锯齿
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio); // 适配高分屏 / Handle HiDPI
+    document.body.appendChild(renderer.domElement);
+
+    // --- 4. 创建彩色立方体 / Create a colorful cube ---
+    // BoxGeometry: 盒子几何体，参数为宽、高、深
+    const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+
+    // MeshStandardMaterial: 标准材质，支持光照响应
+    // metalness: 金属度, roughness: 粗糙度
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x4fc3f7,       // 天蓝色 / Sky blue
+      metalness: 0.3,        // 轻微金属感 / Slight metallic
+      roughness: 0.4,        // 较光滑 / Fairly smooth
+    });
+
+    // Mesh = Geometry + Material，3D世界中的可渲染对象
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    // --- 5. 添加灯光 / Add lights ---
+    // AmbientLight: 环境光，均匀照亮所有物体
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // 柔和白光 / Soft white
+    scene.add(ambientLight);
+
+    // DirectionalLight: 方向光，模拟太阳光
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(5, 8, 5); // 光源位置 / Light position
+    scene.add(directionalLight);
+
+    // --- 6. 坐标轴辅助 / Axes helper ---
+    // AxesHelper(size): 显示XYZ轴，红=X，绿=Y，蓝=Z
+    const axesHelper = new THREE.AxesHelper(3);
+    scene.add(axesHelper);
+
+    // --- 7. 响应窗口变化 / Responsive resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 8. 动画循环 / Animation loop ---
+    // requestAnimationFrame 每帧调用，通常 60fps
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // 旋转立方体 / Rotate the cube
+      cube.rotation.x += 0.008; // X轴旋转
+      cube.rotation.y += 0.012; // Y轴旋转
+
+      // 渲染场景 / Render the scene
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>

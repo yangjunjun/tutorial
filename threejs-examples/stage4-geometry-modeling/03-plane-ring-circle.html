@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>平面与环形 / Planes, Rings & Circles — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0d1117; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 290px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #58a6ff; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 260px; max-height: 92vh; overflow-y: auto;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #58a6ff; margin: 10px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 100px; accent-color: #58a6ff; }
+    #controls .val { color: #58a6ff; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+    #controls button {
+      margin-top: 10px; width: 100%; padding: 7px;
+      border: 1px solid #58a6ff; background: transparent; color: #58a6ff;
+      border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .2s;
+    }
+    #controls button:hover { background: rgba(88,166,255,0.18); }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>平面与环形 / Planes, Rings &amp; Circles</h2>
+  PlaneGeometry · RingGeometry · CircleGeometry<br/>
+  尝试创建半圆、扇形、部分环形等形状<br/>
+  Try creating half-circles, pie shapes, partial rings
+</div>
+
+<div id="controls">
+  <h3>Plane 平面</h3>
+  <label>width <input type="range" id="pW" min="0.5" max="5" step="0.1" value="2"><span class="val" id="pWv">2.0</span></label>
+  <label>height <input type="range" id="pH" min="0.5" max="5" step="0.1" value="2"><span class="val" id="pHv">2.0</span></label>
+  <label>wSeg <input type="range" id="pWS" min="1" max="20" step="1" value="1"><span class="val" id="pWSv">1</span></label>
+  <label>hSeg <input type="range" id="pHS" min="1" max="20" step="1" value="1"><span class="val" id="pHSv">1</span></label>
+
+  <h3>Ring 环形</h3>
+  <label>innerR <input type="range" id="rI" min="0.1" max="2" step="0.1" value="0.5"><span class="val" id="rIv">0.5</span></label>
+  <label>outerR <input type="range" id="rO" min="0.5" max="3" step="0.1" value="1.5"><span class="val" id="rOv">1.5</span></label>
+  <label>thetaSeg <input type="range" id="rTS" min="3" max="64" step="1" value="32"><span class="val" id="rTSv">32</span></label>
+  <label>phiStart <input type="range" id="rPS" min="0" max="6.28" step="0.01" value="0"><span class="val" id="rPSv">0.00</span></label>
+  <label>phiLength <input type="range" id="rPL" min="0.1" max="6.28" step="0.01" value="6.28"><span class="val" id="rPLv">6.28</span></label>
+
+  <h3>Circle 圆形</h3>
+  <label>radius <input type="range" id="cR" min="0.3" max="3" step="0.1" value="1.2"><span class="val" id="cRv">1.2</span></label>
+  <label>segments <input type="range" id="cS" min="3" max="64" step="1" value="32"><span class="val" id="cSv">32</span></label>
+  <label>thetaStart <input type="range" id="cTS" min="0" max="6.28" step="0.01" value="0"><span class="val" id="cTSv">0.00</span></label>
+  <label>thetaLength <input type="range" id="cTL" min="0.1" max="6.28" step="0.01" value="6.28"><span class="val" id="cTLv">6.28</span></label>
+
+  <button id="btnWire">切换线框 / Toggle Wireframe</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 6, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dl = new THREE.DirectionalLight(0xffffff, 1.0);
+dl.position.set(4, 8, 5);
+scene.add(dl);
+
+// ── 材质 / Materials ──
+const matPlane = new THREE.MeshStandardMaterial({ color: 0x58a6ff, side: THREE.DoubleSide, wireframe: false });
+const matRing  = new THREE.MeshStandardMaterial({ color: 0xf0883e, side: THREE.DoubleSide, wireframe: false });
+const matCircle = new THREE.MeshStandardMaterial({ color: 0x3fb950, side: THREE.DoubleSide, wireframe: false });
+const allMats = [matPlane, matRing, matCircle];
+let wireframe = false;
+
+let planeMesh, ringMesh, circleMesh;
+
+// 重建平面 / Rebuild plane
+function buildPlane() {
+  const w = +document.getElementById('pW').value;
+  const h = +document.getElementById('pH').value;
+  const ws = +document.getElementById('pWS').value;
+  const hs = +document.getElementById('pHS').value;
+  if (planeMesh) { planeMesh.geometry.dispose(); scene.remove(planeMesh); }
+  planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, ws, hs), matPlane);
+  planeMesh.position.set(-4, 0, 0);
+  planeMesh.rotation.x = -Math.PI * 0.3;
+  scene.add(planeMesh);
+}
+
+// 重建环形 / Rebuild ring
+function buildRing() {
+  const ir = +document.getElementById('rI').value;
+  const or_ = +document.getElementById('rO').value;
+  const ts = +document.getElementById('rTS').value;
+  const ps = +document.getElementById('rPS').value;
+  const pl = +document.getElementById('rPL').value;
+  if (ringMesh) { ringMesh.geometry.dispose(); scene.remove(ringMesh); }
+  // RingGeometry(innerRadius, outerRadius, thetaSegments, phiSegments, phiStart, phiLength)
+  ringMesh = new THREE.Mesh(new THREE.RingGeometry(ir, or_, ts, 1, ps, pl), matRing);
+  ringMesh.position.set(0, 0, 0);
+  ringMesh.rotation.x = -Math.PI * 0.3;
+  scene.add(ringMesh);
+}
+
+// 重建圆形 / Rebuild circle
+function buildCircle() {
+  const r = +document.getElementById('cR').value;
+  const s = +document.getElementById('cS').value;
+  const ts = +document.getElementById('cTS').value;
+  const tl = +document.getElementById('cTL').value;
+  if (circleMesh) { circleMesh.geometry.dispose(); scene.remove(circleMesh); }
+  // CircleGeometry(radius, segments, thetaStart, thetaLength)
+  circleMesh = new THREE.Mesh(new THREE.CircleGeometry(r, s, ts, tl), matCircle);
+  circleMesh.position.set(4, 0, 0);
+  circleMesh.rotation.x = -Math.PI * 0.3;
+  scene.add(circleMesh);
+}
+
+buildPlane(); buildRing(); buildCircle();
+
+// ── 网格地面 / Grid ──
+const grid = new THREE.GridHelper(20, 20, 0x444466, 0x333355);
+grid.position.y = -2;
+scene.add(grid);
+
+// ── 滑块绑定 / Slider bindings ──
+const binds = [
+  ['pW','pWv',1,buildPlane], ['pH','pHv',1,buildPlane],
+  ['pWS','pWSv',0,buildPlane], ['pHS','pHSv',0,buildPlane],
+  ['rI','rIv',1,buildRing], ['rO','rOv',1,buildRing],
+  ['rTS','rTSv',0,buildRing], ['rPS','rPSv',2,buildRing], ['rPL','rPLv',2,buildRing],
+  ['cR','cRv',1,buildCircle], ['cS','cSv',0,buildCircle],
+  ['cTS','cTSv',2,buildCircle], ['cTL','cTLv',2,buildCircle],
+];
+binds.forEach(([id, vid, dec, fn]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+el.value).toFixed(dec);
+    fn();
+  });
+});
+
+// ── 线框切换 / Wireframe toggle ──
+document.getElementById('btnWire').addEventListener('click', () => {
+  wireframe = !wireframe;
+  allMats.forEach(m => m.wireframe = wireframe);
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  if (planeMesh) planeMesh.rotation.z = Math.sin(t * 0.5) * 0.15;
+  if (ringMesh) ringMesh.rotation.z += 0.003;
+  if (circleMesh) circleMesh.rotation.z += 0.004;
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

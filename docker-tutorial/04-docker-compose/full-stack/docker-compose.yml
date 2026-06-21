@@ -1,0 +1,111 @@
+# ============================================================
+# 全栈应用 - Docker Compose 配置
+# 架构：React 前端 + FastAPI 后端 + PostgreSQL + Nginx 反向代理
+# 启动命令：docker compose up -d --build
+# 访问地址：http://localhost（Nginx 监听 80 端口）
+# ============================================================
+
+services:
+  # ============ Nginx 反向代理（入口）============
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: fullstack-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - frontend-network
+      - backend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============ React 前端 ============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fullstack-frontend
+    # 不直接暴露端口，通过 Nginx 反向代理访问
+    networks:
+      - frontend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============ FastAPI 后端 ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fullstack-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: ${POSTGRES_DB}
+      DATABASE_USER: ${POSTGRES_USER}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend-network
+      - frontend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============ PostgreSQL 数据库 ============
+  db:
+    image: postgres:15-alpine
+    container_name: fullstack-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ============ 数据卷声明 ============
+volumes:
+  postgres_data:
+    driver: local
+
+# ============ 网络配置 ============
+networks:
+  # 前端网络：Nginx <-> Frontend
+  frontend-network:
+    driver: bridge
+
+  # 后端网络：Backend <-> Database（隔离，Nginx 可访问后端 API）
+  backend-network:
+    driver: bridge

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>基础几何体 / Basic Geometries — Three.js Stage 4</title>
+  <style>
+    /* 全局样式 / Global styles */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; }
+    canvas { display: block; }
+
+    /* 信息面板 / Info panel */
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6;
+      max-width: 260px; pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #7ec8e3; }
+
+    /* 控制面板 / Control panel */
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 240px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #7ec8e3; margin: 8px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 110px; accent-color: #7ec8e3; }
+    #controls .val { color: #7ec8e3; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+    #controls button {
+      margin-top: 10px; width: 100%; padding: 7px;
+      border: 1px solid #7ec8e3; background: transparent; color: #7ec8e3;
+      border-radius: 6px; cursor: pointer; font-size: 13px;
+      transition: background .2s;
+    }
+    #controls button:hover { background: rgba(126,200,227,0.18); }
+  </style>
+</head>
+<body>
+
+<!-- 信息面板 / Info panel -->
+<div id="info">
+  <h2>基础几何体 / Basic Geometries</h2>
+  BoxGeometry · SphereGeometry · CylinderGeometry<br/>
+  拖动滑块实时调整参数<br/>
+  Drag sliders to adjust parameters in real-time
+</div>
+
+<!-- 控制面板 / Control panel -->
+<div id="controls">
+  <h3>Box 立方体</h3>
+  <label>width <input type="range" id="boxW" min="0.5" max="4" step="0.1" value="1.5"><span class="val" id="boxWv">1.5</span></label>
+  <label>height <input type="range" id="boxH" min="0.5" max="4" step="0.1" value="1.5"><span class="val" id="boxHv">1.5</span></label>
+  <label>depth <input type="range" id="boxD" min="0.5" max="4" step="0.1" value="1.5"><span class="val" id="boxDv">1.5</span></label>
+
+  <h3>Sphere 球体</h3>
+  <label>radius <input type="range" id="sphR" min="0.3" max="3" step="0.1" value="1"><span class="val" id="sphRv">1.0</span></label>
+  <label>widthSeg <input type="range" id="sphWS" min="3" max="64" step="1" value="32"><span class="val" id="sphWSv">32</span></label>
+  <label>heightSeg <input type="range" id="sphHS" min="2" max="64" step="1" value="16"><span class="val" id="sphHSv">16</span></label>
+
+  <h3>Cylinder 圆柱</h3>
+  <label>radiusTop <input type="range" id="cylRT" min="0.1" max="3" step="0.1" value="0.8"><span class="val" id="cylRTv">0.8</span></label>
+  <label>radiusBot <input type="range" id="cylRB" min="0.1" max="3" step="0.1" value="0.8"><span class="val" id="cylRBv">0.8</span></label>
+  <label>height <input type="range" id="cylH" min="0.5" max="4" step="0.1" value="2"><span class="val" id="cylHv">2.0</span></label>
+  <label>radialSeg <input type="range" id="cylRS" min="3" max="64" step="1" value="32"><span class="val" id="cylRSv">32</span></label>
+
+  <button id="btnWire">切换线框 / Toggle Wireframe</button>
+</div>
+
+<!-- Import map: 从CDN导入Three.js / Import Three.js from CDN -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景、相机、渲染器 / Scene, Camera, Renderer ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 4, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// ── 轨道控制器 / OrbitControls ──
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+ctrl.dampingFactor = 0.08;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 8, 6);
+scene.add(dirLight);
+
+// ── 材质 / Materials ──
+const matBox = new THREE.MeshStandardMaterial({ color: 0xe74c3c, wireframe: false });
+const matSphere = new THREE.MeshStandardMaterial({ color: 0x2ecc71, wireframe: false });
+const matCyl = new THREE.MeshStandardMaterial({ color: 0x3498db, wireframe: false });
+const allMats = [matBox, matSphere, matCyl];
+let wireframe = false;
+
+// ── 网格对象 / Mesh objects ──
+let boxMesh, sphereMesh, cylMesh;
+
+// 创建/重建 Box 几何体 / Create or rebuild Box geometry
+function buildBox() {
+  const w = +document.getElementById('boxW').value;
+  const h = +document.getElementById('boxH').value;
+  const d = +document.getElementById('boxD').value;
+  if (boxMesh) { boxMesh.geometry.dispose(); scene.remove(boxMesh); }
+  boxMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matBox);
+  boxMesh.position.set(-4, 0, 0);
+  scene.add(boxMesh);
+}
+
+// 创建/重建 Sphere 几何体 / Create or rebuild Sphere geometry
+function buildSphere() {
+  const r = +document.getElementById('sphR').value;
+  const ws = +document.getElementById('sphWS').value;
+  const hs = +document.getElementById('sphHS').value;
+  if (sphereMesh) { sphereMesh.geometry.dispose(); scene.remove(sphereMesh); }
+  sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(r, ws, hs), matSphere);
+  sphereMesh.position.set(0, 0, 0);
+  scene.add(sphereMesh);
+}
+
+// 创建/重建 Cylinder 几何体 / Create or rebuild Cylinder geometry
+function buildCyl() {
+  const rt = +document.getElementById('cylRT').value;
+  const rb = +document.getElementById('cylRB').value;
+  const h = +document.getElementById('cylH').value;
+  const rs = +document.getElementById('cylRS').value;
+  if (cylMesh) { cylMesh.geometry.dispose(); scene.remove(cylMesh); }
+  cylMesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, rs), matCyl);
+  cylMesh.position.set(4, 0, 0);
+  scene.add(cylMesh);
+}
+
+// ── 构建初始几何体 / Build initial geometries ──
+buildBox(); buildSphere(); buildCyl();
+
+// ── 地面网格参考 / Ground grid reference ──
+const grid = new THREE.GridHelper(20, 20, 0x444466, 0x333355);
+grid.position.y = -2.5;
+scene.add(grid);
+
+// ── 滑块绑定 / Bind sliders ──
+const sliderIds = [
+  ['boxW','boxWv', buildBox], ['boxH','boxHv', buildBox], ['boxD','boxDv', buildBox],
+  ['sphR','sphRv', buildSphere], ['sphWS','sphWSv', buildSphere], ['sphHS','sphHSv', buildSphere],
+  ['cylRT','cylRTv', buildCyl], ['cylRB','cylRBv', buildCyl], ['cylH','cylHv', buildCyl], ['cylRS','cylRSv', buildCyl],
+];
+sliderIds.forEach(([id, vid, fn]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+el.value).toFixed(el.step.includes('.') ? 1 : 0);
+    fn();
+  });
+});
+
+// ── 线框切换 / Wireframe toggle ──
+document.getElementById('btnWire').addEventListener('click', () => {
+  wireframe = !wireframe;
+  allMats.forEach(m => m.wireframe = wireframe);
+});
+
+// ── 响应式 / Responsive resize ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  // 轻微旋转展示 / Gentle rotation for display
+  if (boxMesh) boxMesh.rotation.y += 0.005;
+  if (sphereMesh) sphereMesh.rotation.y += 0.005;
+  if (cylMesh) cylMesh.rotation.y += 0.005;
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

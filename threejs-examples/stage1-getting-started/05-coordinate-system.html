@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>坐标系统 / Coordinate System - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 14px 18px; border-radius: 8px;
+      font-size: 14px; line-height: 1.6; max-width: 360px;
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+    #info span.r { color: #ff4444; font-weight: bold; }
+    #info span.g { color: #44ff44; font-weight: bold; }
+    #info span.b { color: #4488ff; font-weight: bold; }
+    /* 3D标签样式 / 3D label style */
+    .label-3d {
+      position: absolute; color: #fff; font-size: 13px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 4px;
+      pointer-events: none; white-space: nowrap;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>坐标系统 / Coordinate System</h2>
+    <p>Three.js 使用 <b>右手坐标系，Y轴朝上</b></p>
+    <p><span class="r">X 轴 (红)</span> — 左右方向</p>
+    <p><span class="g">Y 轴 (绿)</span> — 上下方向</p>
+    <p><span class="b">Z 轴 (蓝)</span> — 前后方向</p>
+    <p style="margin-top:6px;color:#aaa;">拖拽旋转 / Drag to orbit, 滚轮缩放 / Scroll to zoom</p>
+  </div>
+
+  <!-- 3D标签容器 / 3D label containers -->
+  <div class="label-3d" id="label-x" style="color:#ff6666;">X (3,0,0)</div>
+  <div class="label-3d" id="label-y" style="color:#66ff66;">Y (0,2,0)</div>
+  <div class="label-3d" id="label-z" style="color:#6688ff;">Z (0,0,3)</div>
+  <div class="label-3d" id="label-axX" style="color:#ff6666;">X →</div>
+  <div class="label-3d" id="label-axY" style="color:#66ff66;">Y ↑</div>
+  <div class="label-3d" id="label-axZ" style="color:#6688ff;">Z ↗</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 坐标系统演示：右手坐标系，Y轴朝上
+    // Coordinate system: right-handed, Y-up
+    // ============================================================
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- 场景 / Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111122);
+
+    // --- 相机 / Camera ---
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(6, 5, 8);
+    camera.lookAt(0, 0, 0);
+
+    // --- 渲染器 / Renderer ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // --- 轨道控制器 / OrbitControls ---
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; // 惯性阻尼 / Damping
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 1, 0); // 看向 (0,1,0)
+
+    // --- 坐标轴辅助 / AxesHelper ---
+    // 大尺寸坐标轴 / Large axes helper
+    const axesHelper = new THREE.AxesHelper(5);
+    scene.add(axesHelper);
+
+    // --- 网格辅助 / GridHelper ---
+    // GridHelper(size, divisions, colorCenterLine, colorGrid)
+    const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222233);
+    scene.add(gridHelper);
+
+    // --- 在原点放置小球 / Small sphere at origin ---
+    const originMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x444444 });
+    const originSphere = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), originMat);
+    scene.add(originSphere);
+
+    // --- 在已知位置放置带标签的物体 / Place labeled objects ---
+    // X轴方向：红色球体 / Red sphere on X axis
+    const sphereX = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xff4444, emissive: 0x331111 })
+    );
+    sphereX.position.set(3, 0.35, 0);
+    scene.add(sphereX);
+
+    // Y轴方向：绿色立方体 / Green cube on Y axis
+    const cubeY = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 0.6, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x44ff44, emissive: 0x113311 })
+    );
+    cubeY.position.set(0, 2, 0);
+    scene.add(cubeY);
+
+    // Z轴方向：蓝色圆柱 / Blue cylinder on Z axis
+    const cylZ = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 0.8, 32),
+      new THREE.MeshStandardMaterial({ color: 0x4488ff, emissive: 0x111133 })
+    );
+    cylZ.position.set(0, 0.4, 3);
+    scene.add(cylZ);
+
+    // --- 灯光 / Lights ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(5, 8, 5);
+    scene.add(dirLight);
+
+    // --- 3D标签投影 / Project 3D labels to screen ---
+    // 将3D世界坐标转换为屏幕2D坐标
+    function worldToScreen(position, cam) {
+      const vec = position.clone().project(cam);
+      return {
+        x: (vec.x * 0.5 + 0.5) * window.innerWidth,
+        y: (-vec.y * 0.5 + 0.5) * window.innerHeight,
+      };
+    }
+
+    // 标签元素 / Label elements
+    const labelX = document.getElementById('label-x');
+    const labelY = document.getElementById('label-y');
+    const labelZ = document.getElementById('label-z');
+    const labelAxX = document.getElementById('label-axX');
+    const labelAxY = document.getElementById('label-axY');
+    const labelAxZ = document.getElementById('label-axZ');
+
+    function updateLabels() {
+      // 物体标签 / Object labels
+      const pX = worldToScreen(sphereX.position, camera);
+      labelX.style.left = pX.x + 'px'; labelX.style.top = (pX.y - 20) + 'px';
+      const pY = worldToScreen(cubeY.position, camera);
+      labelY.style.left = pY.x + 'px'; labelY.style.top = (pY.y - 20) + 'px';
+      const pZ = worldToScreen(cylZ.position, camera);
+      labelZ.style.left = pZ.x + 'px'; labelZ.style.top = (pZ.y - 20) + 'px';
+      // 坐标轴标签 / Axis labels
+      const aX = worldToScreen(new THREE.Vector3(5.3, 0, 0), camera);
+      labelAxX.style.left = aX.x + 'px'; labelAxX.style.top = aX.y + 'px';
+      const aY = worldToScreen(new THREE.Vector3(0, 5.3, 0), camera);
+      labelAxY.style.left = aY.x + 'px'; labelAxY.style.top = aY.y + 'px';
+      const aZ = worldToScreen(new THREE.Vector3(0, 0, 5.3), camera);
+      labelAxZ.style.left = aZ.x + 'px'; labelAxZ.style.top = aZ.y + 'px';
+    }
+
+    // --- 响应窗口变化 / Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 动画循环 / Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      cubeY.rotation.y += 0.01; // 缓慢旋转立方体 / Slowly rotate cube
+      controls.update(); // 更新控制器 / Update controls
+      updateLabels();   // 更新标签位置 / Update label positions
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

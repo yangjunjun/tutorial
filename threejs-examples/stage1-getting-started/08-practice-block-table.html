@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>练习：积木桌 / Practice: Block Table - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 14px 18px; border-radius: 8px;
+      font-size: 14px; line-height: 1.6; max-width: 360px;
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+    #info ul { padding-left: 18px; margin: 4px 0; }
+    #info li { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>练习：积木桌 / Practice: Block Table</h2>
+    <ul>
+      <li>桌面 + 桌腿（BoxGeometry）</li>
+      <li>Table surface + legs</li>
+      <li>各种形状的积木散落桌面</li>
+      <li>Blocks of various shapes on the table</li>
+      <li>地面 + 柔和灯光</li>
+      <li>Floor + soft lighting</li>
+    </ul>
+    <p style="margin-top:4px;color:#aaa;">拖拽旋转 / Drag to orbit, 滚轮缩放 / Scroll to zoom</p>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 练习项目：积木桌场景
+    // Practice project: A table with colorful blocks
+    // 综合应用：场景、相机、灯光、材质、变换、父子关系
+    // ============================================================
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- 场景 / Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2c3e50); // 柔和深蓝 / Soft dark blue
+
+    // 添加雾效 / Add fog
+    scene.fog = new THREE.Fog(0x2c3e50, 12, 25);
+
+    // --- 相机 / Camera ---
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4, 6);
+    camera.lookAt(0, 1, 0);
+
+    // --- 渲染器 / Renderer ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.shadowMap.enabled = true; // 开启阴影 / Enable shadows
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // --- 轨道控制器 / OrbitControls ---
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 1.2, 0);
+
+    // --- 灯光 / Lights ---
+    // 环境光 / Ambient light
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+    // 主方向光（带阴影） / Main directional light with shadow
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+    dirLight.position.set(5, 8, 4);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 20;
+    dirLight.shadow.camera.left = -6;
+    dirLight.shadow.camera.right = 6;
+    dirLight.shadow.camera.top = 6;
+    dirLight.shadow.camera.bottom = -6;
+    scene.add(dirLight);
+
+    // 补光 / Fill light
+    const fillLight = new THREE.DirectionalLight(0x8899cc, 0.4);
+    fillLight.position.set(-3, 4, -3);
+    scene.add(fillLight);
+
+    // --- 地面 / Floor ---
+    const floorGeo = new THREE.PlaneGeometry(20, 20);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x34495e, roughness: 0.9, metalness: 0.0
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // --- 桌子 / Table ---
+    // 桌面用 Group 作为父对象 / Table group as parent
+    const table = new THREE.Group();
+    scene.add(table);
+
+    // 桌面 / Table top
+    const tableTopGeo = new THREE.BoxGeometry(4, 0.15, 2.5);
+    const woodMat = new THREE.MeshStandardMaterial({
+      color: 0x8B5A2B, roughness: 0.7, metalness: 0.05
+    });
+    const tableTop = new THREE.Mesh(tableTopGeo, woodMat);
+    tableTop.position.set(0, 1.5, 0);
+    tableTop.castShadow = true;
+    tableTop.receiveShadow = true;
+    table.add(tableTop);
+
+    // 桌腿 / Table legs (4 legs)
+    const legGeo = new THREE.BoxGeometry(0.15, 1.5, 0.15);
+    const legPositions = [
+      [-1.8, 0.75, -1.1],  // 左后 / Back-left
+      [1.8, 0.75, -1.1],   // 右后 / Back-right
+      [-1.8, 0.75, 1.1],   // 左前 / Front-left
+      [1.8, 0.75, 1.1],    // 右前 / Front-right
+    ];
+    legPositions.forEach(pos => {
+      const leg = new THREE.Mesh(legGeo, woodMat);
+      leg.position.set(...pos);
+      leg.castShadow = true;
+      table.add(leg); // 作为桌子的子物体 / Child of table group
+    });
+
+    // --- 积木 / Blocks ---
+    // 积木定义：几何体、颜色、位置、旋转
+    const blockDefs = [
+      // 红色方块 / Red cube
+      { geo: new THREE.BoxGeometry(0.5, 0.5, 0.5), color: 0xe74c3c, pos: [-0.8, 1.83, -0.3], rot: [0, 0.3, 0] },
+      // 蓝色球体 / Blue sphere
+      { geo: new THREE.SphereGeometry(0.25, 32, 32), color: 0x3498db, pos: [0.5, 1.83, 0.4], rot: [0, 0, 0] },
+      // 绿色圆柱 / Green cylinder
+      { geo: new THREE.CylinderGeometry(0.2, 0.2, 0.5, 32), color: 0x2ecc71, pos: [-0.3, 1.83, 0.5], rot: [0, 0, 0] },
+      // 黄色圆锥 / Yellow cone
+      { geo: new THREE.ConeGeometry(0.25, 0.5, 32), color: 0xf1c40f, pos: [1.0, 1.83, -0.4], rot: [0, 0.5, 0] },
+      // 紫色圆环 / Purple torus
+      { geo: new THREE.TorusGeometry(0.2, 0.08, 16, 32), color: 0x9b59b6, pos: [0.2, 1.73, -0.6], rot: [Math.PI / 2, 0, 0] },
+      // 橙色十二面体 / Orange dodecahedron
+      { geo: new THREE.DodecahedronGeometry(0.22), color: 0xe67e22, pos: [-1.2, 1.8, 0.2], rot: [0.2, 0.4, 0] },
+      // 青色八面体 / Cyan octahedron
+      { geo: new THREE.OctahedronGeometry(0.22), color: 0x1abc9c, pos: [1.3, 1.8, 0.1], rot: [0, 0.6, 0.2] },
+      // 粉色小方块 / Pink small box
+      { geo: new THREE.BoxGeometry(0.3, 0.3, 0.3), color: 0xff69b4, pos: [0.0, 1.83, 0.0], rot: [0, 0.8, 0] },
+    ];
+
+    const blocks = [];
+    blockDefs.forEach((def) => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: def.color, metalness: 0.15, roughness: 0.5
+      });
+      const mesh = new THREE.Mesh(def.geo, mat);
+      mesh.position.set(...def.pos);
+      mesh.rotation.set(...def.rot);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      table.add(mesh); // 积木也是桌子的子物体 / Blocks are children of table
+      blocks.push(mesh);
+    });
+
+    // --- 响应窗口变化 / Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 动画循环 / Animation loop ---
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      // 积木轻微浮动和旋转 / Gentle floating and rotating blocks
+      blocks.forEach((block, i) => {
+        block.position.y = blockDefs[i].pos[1] + Math.sin(t * 1.2 + i * 0.7) * 0.03;
+        block.rotation.y += 0.003 + i * 0.0005;
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

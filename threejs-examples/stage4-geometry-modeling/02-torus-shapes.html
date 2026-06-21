@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>环面与特殊形状 / Torus & Special Shapes — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f23; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #f7b731; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 250px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #f7b731; margin: 10px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 110px; accent-color: #f7b731; }
+    #controls .val { color: #f7b731; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>环面与特殊形状 / Torus &amp; Special Shapes</h2>
+  TorusGeometry · TorusKnotGeometry<br/>
+  调整 p、q 参数观察不同纽结形态<br/>
+  Change p &amp; q to see different knot patterns
+</div>
+
+<div id="controls">
+  <h3>Torus 环面</h3>
+  <label>radius <input type="range" id="tR" min="0.5" max="3" step="0.1" value="1.5"><span class="val" id="tRv">1.5</span></label>
+  <label>tube <input type="range" id="tT" min="0.1" max="1.5" step="0.05" value="0.5"><span class="val" id="tTv">0.50</span></label>
+  <label>radialSeg <input type="range" id="tRS" min="3" max="48" step="1" value="16"><span class="val" id="tRSv">16</span></label>
+  <label>tubularSeg <input type="range" id="tTS" min="3" max="128" step="1" value="48"><span class="val" id="tTSv">48</span></label>
+  <label>arc <input type="range" id="tA" min="0.1" max="6.28" step="0.01" value="6.28"><span class="val" id="tAv">6.28</span></label>
+
+  <h3>TorusKnot 环面纽结</h3>
+  <label>radius <input type="range" id="kR" min="0.3" max="2.5" step="0.1" value="1"><span class="val" id="kRv">1.0</span></label>
+  <label>tube <input type="range" id="kT" min="0.05" max="0.8" step="0.05" value="0.3"><span class="val" id="kTv">0.30</span></label>
+  <label>p (winding) <input type="range" id="kP" min="1" max="10" step="1" value="2"><span class="val" id="kPv">2</span></label>
+  <label>q (winding) <input type="range" id="kQ" min="1" max="10" step="1" value="3"><span class="val" id="kQv">3</span></label>
+  <label>tubularSeg <input type="range" id="kTS" min="16" max="256" step="4" value="100"><span class="val" id="kTSv">100</span></label>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景设置 / Scene setup ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f0f23);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 3, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// ── 轨道控制器 / OrbitControls ──
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+ctrl.dampingFactor = 0.08;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+dl.position.set(5, 8, 4);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8888ff, 0.5);
+dl2.position.set(-4, 3, -5);
+scene.add(dl2);
+
+// ── 材质 / Materials ──
+const matTorus = new THREE.MeshStandardMaterial({ color: 0xf7b731, metalness: 0.3, roughness: 0.4 });
+const matKnot = new THREE.MeshStandardMaterial({ color: 0xfc5c65, metalness: 0.4, roughness: 0.3 });
+
+// ── 对象引用 / Object references ──
+let torusMesh, knotMesh;
+
+// 重建环面 / Rebuild torus
+function buildTorus() {
+  const r = +document.getElementById('tR').value;
+  const t = +document.getElementById('tT').value;
+  const rs = +document.getElementById('tRS').value;
+  const ts = +document.getElementById('tTS').value;
+  const a = +document.getElementById('tA').value;
+  if (torusMesh) { torusMesh.geometry.dispose(); scene.remove(torusMesh); }
+  // TorusGeometry(radius, tube, radialSegments, tubularSegments, arc)
+  torusMesh = new THREE.Mesh(new THREE.TorusGeometry(r, t, rs, ts, a), matTorus);
+  torusMesh.position.set(-3, 0, 0);
+  scene.add(torusMesh);
+}
+
+// 重建纽结 / Rebuild torus knot
+function buildKnot() {
+  const r = +document.getElementById('kR').value;
+  const t = +document.getElementById('kT').value;
+  const p = +document.getElementById('kP').value;
+  const q = +document.getElementById('kQ').value;
+  const ts = +document.getElementById('kTS').value;
+  if (knotMesh) { knotMesh.geometry.dispose(); scene.remove(knotMesh); }
+  // TorusKnotGeometry(radius, tube, tubularSegments, radialSegments, p, q)
+  knotMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(r, t, ts, 8, p, q), matKnot);
+  knotMesh.position.set(3, 0, 0);
+  scene.add(knotMesh);
+}
+
+buildTorus();
+buildKnot();
+
+// ── 网格地面 / Grid floor ──
+const grid = new THREE.GridHelper(20, 20, 0x444466, 0x333355);
+grid.position.y = -3;
+scene.add(grid);
+
+// ── 滑块绑定 / Bind sliders ──
+const bindings = [
+  ['tR','tRv',1,buildTorus], ['tT','tTv',2,buildTorus], ['tRS','tRSv',0,buildTorus],
+  ['tTS','tTSv',0,buildTorus], ['tA','tAv',2,buildTorus],
+  ['kR','kRv',1,buildKnot], ['kT','kTv',2,buildKnot],
+  ['kP','kPv',0,buildKnot], ['kQ','kQv',0,buildKnot], ['kTS','kTSv',0,buildKnot],
+];
+bindings.forEach(([id, vid, dec, fn]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+el.value).toFixed(dec);
+    fn();
+  });
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  // 平滑旋转展示 / Smooth rotation animation
+  if (torusMesh) {
+    torusMesh.rotation.x = t * 0.3;
+    torusMesh.rotation.y = t * 0.5;
+  }
+  if (knotMesh) {
+    knotMesh.rotation.x = t * 0.25;
+    knotMesh.rotation.y = t * 0.4;
+  }
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

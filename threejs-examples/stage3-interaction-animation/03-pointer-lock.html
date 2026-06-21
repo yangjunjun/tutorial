@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>指针锁定 / PointerLockControls (FPS) - Three.js Tutorial Stage 3</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    /* 准星 / Crosshair */
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px; height: 20px;
+      pointer-events: none; display: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.85);
+    }
+    #crosshair::before { width: 2px; height: 20px; left: 9px; top: 0; }
+    #crosshair::after  { width: 20px; height: 2px; left: 0; top: 9px; }
+    /* 信息面板 / Info panel */
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.75); color: #fff; padding: 14px 18px;
+      border-radius: 8px; font-size: 13px; line-height: 1.8;
+      pointer-events: none; min-width: 240px; user-select: none;
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #ef5350; }
+    #info kbd {
+      background: #333; padding: 1px 6px; border-radius: 3px;
+      border: 1px solid #555; font-size: 12px;
+    }
+    /* 开始覆盖层 / Start overlay */
+    #overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); display: flex; align-items: center;
+      justify-content: center; flex-direction: column; color: #fff;
+      font-size: 22px; cursor: pointer; z-index: 10;
+    }
+    #overlay small { font-size: 14px; color: #aaa; margin-top: 10px; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <!-- 信息面板 / Info panel -->
+  <div id="info">
+    <h2>指针锁定 / PointerLock (FPS)</h2>
+    <div>点击屏幕进入 / Click to enter</div>
+    <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 / Move</div>
+    <div><kbd>Space</kbd> 跳跃 / Jump</div>
+    <div><kbd>ESC</kbd> 退出锁定 / Exit lock</div>
+    <div id="posInfo" style="color:#aaa;font-size:12px;margin-top:8px;border-top:1px solid #333;padding-top:8px;">
+      状态 / Status: 未锁定 / Unlocked
+    </div>
+  </div>
+  <!-- 开始覆盖层 / Start overlay -->
+  <div id="overlay">
+    点击进入 FPS 模式 / Click to Enter FPS Mode
+    <small>按 ESC 退出 / Press ESC to exit</small>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+    // ===== 场景 / Scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    scene.fog = new THREE.Fog(0x1a1a2e, 10, 60);
+
+    // ===== 相机 / Camera =====
+    const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 1.7, 5);
+
+    // ===== 渲染器 / Renderer =====
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 指针锁定控制器 / PointerLockControls =====
+    const controls = new PointerLockControls(camera, renderer.domElement);
+
+    const overlay = document.getElementById('overlay');
+    const crosshair = document.getElementById('crosshair');
+    const posInfo = document.getElementById('posInfo');
+
+    // 点击进入指针锁定 / Click to enter pointer lock
+    overlay.addEventListener('click', () => controls.lock());
+
+    controls.addEventListener('lock', () => {
+      overlay.style.display = 'none';
+      crosshair.style.display = 'block';
+      posInfo.textContent = '状态 / Status: 已锁定 / Locked';
+    });
+    controls.addEventListener('unlock', () => {
+      overlay.style.display = 'flex';
+      crosshair.style.display = 'none';
+      posInfo.textContent = '状态 / Status: 未锁定 / Unlocked';
+    });
+
+    // ===== 灯光 / Lights =====
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+    // 彩色点光源 / Colored point lights
+    const plColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x82b1ff];
+    plColors.forEach((c, i) => {
+      const pl = new THREE.PointLight(c, 4, 20);
+      const a = (i / plColors.length) * Math.PI * 2;
+      pl.position.set(Math.cos(a) * 10, 4, Math.sin(a) * 10);
+      scene.add(pl);
+    });
+
+    // ===== 地面 / Ground =====
+    const floorGeo = new THREE.PlaneGeometry(40, 40);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x2a2a3e, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    // 网格 / Grid
+    scene.add(new THREE.GridHelper(40, 40, 0x444466, 0x333355));
+
+    // ===== 围墙 / Walls =====
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a3a5e, roughness: 0.7 });
+    const wallH = 6, wallW = 40;
+    const wallGeo = new THREE.BoxGeometry(wallW, wallH, 0.3);
+    const wallPositions = [
+      { pos: [0, wallH / 2, -20], rot: [0, 0, 0] },
+      { pos: [0, wallH / 2, 20], rot: [0, 0, 0] },
+      { pos: [-20, wallH / 2, 0], rot: [0, Math.PI / 2, 0] },
+      { pos: [20, wallH / 2, 0], rot: [0, Math.PI / 2, 0] },
+    ];
+    const wallColors = [0x5c6bc0, 0xef5350, 0x66bb6a, 0xffa726];
+    wallPositions.forEach((w, i) => {
+      const mat = new THREE.MeshStandardMaterial({ color: wallColors[i], roughness: 0.6 });
+      const wall = new THREE.Mesh(wallGeo, mat);
+      wall.position.set(...w.pos);
+      wall.rotation.set(...w.rot);
+      wall.receiveShadow = true;
+      scene.add(wall);
+    });
+
+    // ===== 竞技场中的物体 / Objects in the arena =====
+    const objects = [];
+    const geoTypes = [
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.SphereGeometry(0.6, 24, 24),
+      new THREE.ConeGeometry(0.5, 1.2, 12),
+      new THREE.TorusGeometry(0.5, 0.2, 12, 32),
+      new THREE.OctahedronGeometry(0.6),
+    ];
+    const objColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0xa8e6cf, 0xff8a80, 0x82b1ff, 0xb39ddb, 0xffab91];
+    for (let i = 0; i < 30; i++) {
+      const geo = geoTypes[i % geoTypes.length];
+      const mat = new THREE.MeshStandardMaterial({ color: objColors[i % objColors.length], roughness: 0.3, metalness: 0.4 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(
+        (Math.random() - 0.5) * 30,
+        0.5 + Math.random() * 3,
+        (Math.random() - 0.5) * 30
+      );
+      mesh.castShadow = true;
+      scene.add(mesh);
+      objects.push(mesh);
+    }
+
+    // ===== 移动控制 / Movement controls =====
+    const keys = { w: false, a: false, s: false, d: false, space: false };
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    const moveSpeed = 40;
+    const friction = 8;
+    let canJump = true;
+    // 重力和跳跃 / Gravity and jump
+    let verticalVelocity = 0;
+    const gravity = -25;
+    const jumpForce = 9;
+    const playerHeight = 1.7;
+
+    document.addEventListener('keydown', e => {
+      switch (e.code) {
+        case 'KeyW': case 'ArrowUp':    keys.w = true; break;
+        case 'KeyA': case 'ArrowLeft':  keys.a = true; break;
+        case 'KeyS': case 'ArrowDown':  keys.s = true; break;
+        case 'KeyD': case 'ArrowRight': keys.d = true; break;
+        case 'Space':
+          if (canJump) { verticalVelocity = jumpForce; canJump = false; }
+          keys.space = true; break;
+      }
+    });
+    document.addEventListener('keyup', e => {
+      switch (e.code) {
+        case 'KeyW': case 'ArrowUp':    keys.w = false; break;
+        case 'KeyA': case 'ArrowLeft':  keys.a = false; break;
+        case 'KeyS': case 'ArrowDown':  keys.s = false; break;
+        case 'KeyD': case 'ArrowRight': keys.d = false; break;
+        case 'Space': keys.space = false; break;
+      }
+    });
+
+    // ===== 响应式画布 / Responsive canvas =====
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (controls.isLocked) {
+        // 计算移动方向 / Calculate movement direction
+        direction.z = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+        direction.x = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+        direction.normalize();
+
+        // 应用摩擦力 / Apply friction
+        velocity.x -= velocity.x * friction * delta;
+        velocity.z -= velocity.z * friction * delta;
+
+        // 应用加速 / Apply acceleration
+        if (direction.z !== 0) velocity.z -= direction.z * moveSpeed * delta;
+        if (direction.x !== 0) velocity.x -= direction.x * moveSpeed * delta;
+
+        // 移动相机 / Move camera
+        controls.moveRight(-velocity.x * delta);
+        controls.moveForward(-velocity.z * delta);
+
+        // 重力和跳跃 / Gravity and jump
+        verticalVelocity += gravity * delta;
+        camera.position.y += verticalVelocity * delta;
+        if (camera.position.y <= playerHeight) {
+          camera.position.y = playerHeight;
+          verticalVelocity = 0;
+          canJump = true;
+        }
+
+        // 限制在围墙内 / Constrain within walls
+        camera.position.x = Math.max(-19, Math.min(19, camera.position.x));
+        camera.position.z = Math.max(-19, Math.min(19, camera.position.z));
+      }
+
+      // 旋转物体 / Rotate objects
+      objects.forEach((obj, i) => { obj.rotation.y += 0.005 * (i % 2 === 0 ? 1 : -1); });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

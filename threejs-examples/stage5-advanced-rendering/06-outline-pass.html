@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>描边效果 / Outline Effect</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 320px; font-size: 13px; line-height: 1.6;
+            z-index: 10;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #f6c; }
+        #info p { margin: 3px 0; }
+        #selected { margin-top: 6px; color: #aaa; font-size: 12px; }
+        .color-btn {
+            display: inline-block; width: 24px; height: 24px; margin: 4px 4px 0 0;
+            border: 2px solid transparent; border-radius: 4px; cursor: pointer; transition: border 0.2s;
+        }
+        .color-btn:hover, .color-btn.active { border-color: #fff; }
+        .slider-group { margin: 6px 0; }
+        .slider-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 2px; }
+        .slider-group input[type=range] {
+            width: 100%; height: 4px; -webkit-appearance: none;
+            background: #444; border-radius: 2px; outline: none;
+        }
+        .slider-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: #f6c; border-radius: 50%; cursor: pointer;
+        }
+        .val { float: right; color: #f6c; font-family: monospace; }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>描边效果 / Outline Effect</h2>
+    <p>悬停高亮物体，点击持久选中。OutlinePass 为选中物体添加彩色描边。</p>
+    <p style="color:#888;">Hover to highlight, click to select. OutlinePass adds colored outlines.</p>
+    <div style="margin-top:8px;">
+        <span style="font-size:12px; color:#aaa;">描边颜色 Outline Color:</span><br>
+        <div class="color-btn active" style="background:#ff66cc;" data-color="#ff66cc"></div>
+        <div class="color-btn" style="background:#66ccff;" data-color="#66ccff"></div>
+        <div class="color-btn" style="background:#66ff66;" data-color="#66ff66"></div>
+        <div class="color-btn" style="background:#ffcc66;" data-color="#ffcc66"></div>
+        <div class="color-btn" style="background:#ff4444;" data-color="#ff4444"></div>
+    </div>
+    <div class="slider-group">
+        <label>描边强度 Edge Strength <span class="val" id="vStrength">4.0</span></label>
+        <input type="range" id="edgeStrength" min="1" max="10" step="0.1" value="4">
+    </div>
+    <div class="slider-group">
+        <label>发光强度 Pulse/Edge Glow <span class="val" id="vGlow">2.5</span></label>
+        <input type="range" id="edgeGlow" min="0" max="5" step="0.1" value="2.5">
+    </div>
+    <div class="slider-group">
+        <label>描边粗细 Edge Thickness <span class="val" id="vThickness">1.5</span></label>
+        <input type="range" id="edgeThickness" min="0.5" max="5" step="0.1" value="1.5">
+    </div>
+    <p id="selected">已选中: 无 / Selected: None</p>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(5, 4, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ============ 灯光 / Lighting ============
+scene.add(new THREE.AmbientLight(0x404060, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(5, 8, 5);
+scene.add(dirLight);
+scene.add(new THREE.PointLight(0xff8844, 1, 15).translateX(-3));
+
+// ============ 创建可交互物体 / Create Interactive Objects ============
+const selectableObjects = [];
+const geometries = [
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.SphereGeometry(0.6, 32, 32),
+    new THREE.TorusKnotGeometry(0.4, 0.15, 64, 16),
+    new THREE.ConeGeometry(0.5, 1, 16),
+    new THREE.TorusGeometry(0.5, 0.2, 16, 32),
+    new THREE.OctahedronGeometry(0.6),
+    new THREE.DodecahedronGeometry(0.5),
+    new THREE.IcosahedronGeometry(0.55),
+    new THREE.CylinderGeometry(0.3, 0.5, 1, 16)
+];
+
+const objectNames = [
+    '立方体 Cube', '球体 Sphere', '纽结 Torus Knot',
+    '锥体 Cone', '环体 Torus', '八面体 Octahedron',
+    '十二面体 Dodecahedron', '二十面体 Icosahedron', '圆柱 Cylinder'
+];
+
+// 地板 / Floor
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.9 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// 3x3 网格排列物体 / Arrange objects in 3x3 grid
+for (let i = 0; i < 9; i++) {
+    const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(i / 9, 0.7, 0.5),
+        roughness: 0.3, metalness: 0.6
+    });
+    const mesh = new THREE.Mesh(geometries[i], mat);
+    const row = Math.floor(i / 3);
+    const col = i % 3;
+    mesh.position.set((col - 1) * 3, 0.8, (row - 1) * 3);
+    mesh.userData.name = objectNames[i];
+    mesh.userData.index = i;
+    scene.add(mesh);
+    selectableObjects.push(mesh);
+}
+
+// ============ 后处理 - 描边 / Post-Processing - Outline ============
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+// OutlinePass: 分辨率, 场景, 相机
+const outlinePass = new OutlinePass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    scene, camera
+);
+outlinePass.edgeStrength = 4.0;
+outlinePass.edgeGlow = 2.5;
+outlinePass.edgeThickness = 1.5;
+outlinePass.pulsePeriod = 2; // 脉动周期 / Pulse period
+outlinePass.visibleEdgeColor.set(0xff66cc);
+outlinePass.hiddenEdgeColor.set(0x442233);
+composer.addPass(outlinePass);
+composer.addPass(new OutputPass());
+
+// ============ 交互逻辑 / Interaction Logic ============
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const selectedObjects = []; // 持久选中的物体 / Persistently selected objects
+let hoveredObject = null;   // 当前悬停的物体 / Currently hovered object
+const selectedSet = new Set();
+
+// 鼠标移动 - 悬停高亮 / Mouse move - hover highlight
+renderer.domElement.addEventListener('mousemove', (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const intersects = raycaster.intersectObjects(selectableObjects);
+    if (intersects.length > 0) {
+        hoveredObject = intersects[0].object;
+        renderer.domElement.style.cursor = 'pointer';
+    } else {
+        hoveredObject = null;
+        renderer.domElement.style.cursor = 'default';
+    }
+    // 合并悬停和选中的物体 / Merge hovered and selected objects
+    outlinePass.selectedObjects = [...selectedObjects, ...(hoveredObject && !selectedSet.has(hoveredObject) ? [hoveredObject] : [])];
+});
+
+// 鼠标点击 - 切换选中 / Mouse click - toggle selection
+renderer.domElement.addEventListener('click', () => {
+    if (hoveredObject) {
+        if (selectedSet.has(hoveredObject)) {
+            // 取消选中 / Deselect
+            selectedSet.delete(hoveredObject);
+            const idx = selectedObjects.indexOf(hoveredObject);
+            if (idx > -1) selectedObjects.splice(idx, 1);
+        } else {
+            // 选中 / Select
+            selectedSet.add(hoveredObject);
+            selectedObjects.push(hoveredObject);
+        }
+        // 更新显示 / Update display
+        const names = selectedObjects.map(o => o.userData.name).join(', ');
+        document.getElementById('selected').textContent = `已选中 / Selected: ${names || 'None'}`;
+        outlinePass.selectedObjects = [...selectedObjects];
+    }
+});
+
+// ============ UI 控件 / UI Controls ============
+// 颜色按钮 / Color buttons
+document.querySelectorAll('.color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        outlinePass.visibleEdgeColor.set(btn.dataset.color);
+    });
+});
+
+// 滑块 / Sliders
+document.getElementById('edgeStrength').addEventListener('input', (e) => {
+    outlinePass.edgeStrength = parseFloat(e.target.value);
+    document.getElementById('vStrength').textContent = parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('edgeGlow').addEventListener('input', (e) => {
+    outlinePass.edgeGlow = parseFloat(e.target.value);
+    document.getElementById('vGlow').textContent = parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('edgeThickness').addEventListener('input', (e) => {
+    outlinePass.edgeThickness = parseFloat(e.target.value);
+    document.getElementById('vThickness').textContent = parseFloat(e.target.value).toFixed(1);
+});
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+    outlinePass.resolution.set(w, h);
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    // 旋转所有物体 / Rotate all objects
+    selectableObjects.forEach((obj, i) => {
+        obj.rotation.y = t * 0.3 + i * 0.5;
+        obj.rotation.x = Math.sin(t * 0.5 + i) * 0.2;
+    });
+
+    controls.update();
+    composer.render();
+}
+
+animate();
+</script>
+</body>
+</html>

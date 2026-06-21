@@ -1,0 +1,85 @@
+# =====================================================
+# Spring Boot 3 博客系统 — application.yml
+# 本章重点：SpringDoc OpenAPI (Swagger) 相关配置
+# =====================================================
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: blog-system
+
+  # 数据源配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/blog?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+# =====================================================
+# SpringDoc OpenAPI (Swagger) 配置
+# =====================================================
+springdoc:
+  # --- OpenAPI JSON 文档配置 ---
+  api-docs:
+    path: /v3/api-docs              # OpenAPI JSON 文档的访问路径
+    enabled: true                   # 是否启用（生产环境设为 false）
+
+  # --- Swagger UI 配置 ---
+  swagger-ui:
+    path: /swagger-ui.html          # Swagger UI 页面的访问路径
+    enabled: true                   # 是否启用（生产环境设为 false）
+    tags-sorter: alpha              # Tag 排序方式：alpha（字母序）
+    operations-sorter: alpha        # 接口排序方式：alpha（字母序）
+    # display-request-duration: true  # 显示请求耗时（调试用，取消注释启用）
+
+    # Swagger UI 持久化配置（可选）
+    # use-root-path: true            # 使用根路径存储 UI 设置
+
+  # --- 扫描配置 ---
+  # 指定 Controller 包路径（可选，默认扫描所有 @RestController）
+  packages-to-scan: com.example.blog.controller
+
+  # 默认媒体类型
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+
+  # --- 全局配置（可选） ---
+  # override-with-generic-response: false  # 是否覆盖全局响应描述
+
+# =====================================================
+# MyBatis-Plus 配置
+# =====================================================
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.blog.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# =====================================================
+# 日志配置
+# =====================================================
+logging:
+  level:
+    com.example.blog: debug
+    # 如果需要调试 SpringDoc 问题，可以开启以下日志
+    # org.springdoc: debug
+
+# =====================================================
+# 自定义文件上传配置
+# =====================================================
+file:
+  upload:
+    base-path: /data/blog/uploads
+    url-prefix: /uploads
+    allowed-types: image/jpeg,image/png,image/gif,image/webp,application/pdf
+    max-size: 10485760  # 10MB

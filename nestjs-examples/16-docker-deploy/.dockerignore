@@ -1,0 +1,36 @@
+# 依赖目录（Docker 内部会重新安装）
+node_modules
+
+# 编译输出（Docker 内部会重新编译）
+dist
+
+# 版本控制目录（减小构建上下文）
+.git
+.gitignore
+
+# 环境变量文件（通过 Docker 环境变量注入）
+.env
+.env.*
+
+# 文档文件（生产镜像不需要）
+*.md
+README.md
+
+# 测试和覆盖率（生产镜像不需要）
+coverage
+.nyc_output
+test
+
+# IDE 配置（生产镜像不需要）
+.idea
+.vscode
+*.swp
+*.swo
+
+# CI/CD 配置（生产镜像不需要）
+.github
+
+# Docker 自身配置（避免循环引用）
+Dockerfile
+docker-compose*.yml
+.dockerignore

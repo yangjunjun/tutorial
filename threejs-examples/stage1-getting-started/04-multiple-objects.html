@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多个物体 / Multiple Objects - Three.js Tutorial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 14px 18px; border-radius: 8px;
+      font-size: 14px; line-height: 1.6; max-width: 340px;
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info h2 { font-size: 16px; margin-bottom: 6px; color: #4fc3f7; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>多个物体 / Multiple Objects</h2>
+    <p>Box 盒子, Sphere 球体, Cylinder 圆柱</p>
+    <p>Torus 圆环, Cone 圆锥, Dodecahedron 十二面体</p>
+    <p>TorusKnot 环面结, Octahedron 八面体</p>
+    <p>圆形排列 + 独立旋转动画</p>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 多个物体：圆形排列 + 各自旋转
+    // Multiple objects arranged in a circle with individual rotation
+    // ============================================================
+    import * as THREE from 'three';
+
+    // --- 场景 / Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f0f23);
+
+    // 添加雾效 / Add fog for depth
+    scene.fog = new THREE.FogExp2(0x0f0f23, 0.04);
+
+    // --- 相机 / Camera ---
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 6, 12);
+    camera.lookAt(0, 0, 0);
+
+    // --- 渲染器 / Renderer ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    document.body.appendChild(renderer.domElement);
+
+    // --- 定义几何体和颜色 / Define geometries and colors ---
+    const shapes = [
+      { geo: new THREE.BoxGeometry(1, 1, 1),               color: 0xe74c3c, name: 'Box' },
+      { geo: new THREE.SphereGeometry(0.6, 32, 32),         color: 0x3498db, name: 'Sphere' },
+      { geo: new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32),color: 0x2ecc71, name: 'Cylinder' },
+      { geo: new THREE.TorusGeometry(0.5, 0.2, 16, 48),    color: 0xf39c12, name: 'Torus' },
+      { geo: new THREE.ConeGeometry(0.5, 1.2, 32),          color: 0x9b59b6, name: 'Cone' },
+      { geo: new THREE.DodecahedronGeometry(0.6),            color: 0x1abc9c, name: 'Dodecahedron' },
+      { geo: new THREE.TorusKnotGeometry(0.4, 0.15, 64, 16),color: 0xe67e22, name: 'TorusKnot' },
+      { geo: new THREE.OctahedronGeometry(0.6),              color: 0xec407a, name: 'Octahedron' },
+    ];
+
+    const objects = [];
+    const radius = 4; // 圆形排列半径 / Circle radius
+
+    shapes.forEach((shape, i) => {
+      // 创建材质 / Create material
+      const mat = new THREE.MeshStandardMaterial({
+        color: shape.color,
+        metalness: 0.3,
+        roughness: 0.4,
+      });
+      const mesh = new THREE.Mesh(shape.geo, mat);
+
+      // 圆形排列 / Circular arrangement
+      const angle = (i / shapes.length) * Math.PI * 2;
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        1 + Math.sin(i * 0.8) * 0.5, // 略微不同高度 / Slightly varied heights
+        Math.sin(angle) * radius
+      );
+
+      scene.add(mesh);
+      objects.push({ mesh, speedX: 0.005 + i * 0.002, speedY: 0.008 + i * 0.003 });
+    });
+
+    // --- 地面 / Ground ---
+    const groundGeo = new THREE.CircleGeometry(10, 64);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x222244, roughness: 0.9, metalness: 0.0
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.5;
+    scene.add(ground);
+
+    // --- 灯光 / Lights ---
+    // 环境光 / Ambient
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+    // 主方向光 / Main directional
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+
+    // 补光 / Fill light
+    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.4);
+    fillLight.position.set(-5, 3, -5);
+    scene.add(fillLight);
+
+    // 彩色点光 / Colored point lights
+    const p1 = new THREE.PointLight(0xff4444, 15, 15);
+    p1.position.set(4, 3, 0);
+    scene.add(p1);
+    const p2 = new THREE.PointLight(0x4444ff, 15, 15);
+    p2.position.set(-4, 3, 0);
+    scene.add(p2);
+
+    // --- 响应窗口变化 / Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 动画循环 / Animation loop ---
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      // 旋转每个物体 / Rotate each object
+      objects.forEach((obj, i) => {
+        obj.mesh.rotation.x += obj.speedX;
+        obj.mesh.rotation.y += obj.speedY;
+        // 轻微上下浮动 / Gentle floating
+        obj.mesh.position.y = 1 + Math.sin(t * 0.8 + i) * 0.3;
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

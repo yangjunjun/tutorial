@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义地形 / Custom Terrain — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0b1026; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #78e08f; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 240px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #78e08f; margin: 8px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 100px; accent-color: #78e08f; }
+    #controls .val { color: #78e08f; min-width: 36px; text-align: right; }
+    #controls button {
+      margin-top: 10px; width: 100%; padding: 7px;
+      border: 1px solid #78e08f; background: transparent; color: #78e08f;
+      border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+    #controls button:hover { background: rgba(120,224,143,0.18); }
+    /* 颜色图例 / Color legend */
+    .legend { margin-top: 12px; font-size: 11px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+    .legend-color { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>自定义地形 / Custom Terrain</h2>
+  程序化噪声生成高度图地形<br/>
+  Procedural noise heightmap terrain<br/>
+  颜色编码：水域/草地/山地/雪<br/>
+  Color coded: water/grass/mountain/snow
+</div>
+
+<div id="controls">
+  <h3>噪声参数 / Noise Params</h3>
+  <label>scale <input type="range" id="nScale" min="1" max="20" step="0.5" value="6"><span class="val" id="nScalev">6.0</span></label>
+  <label>amplitude <input type="range" id="nAmp" min="0.2" max="5" step="0.1" value="2"><span class="val" id="nAmpv">2.0</span></label>
+  <label>octaves <input type="range" id="nOct" min="1" max="6" step="1" value="4"><span class="val" id="nOctv">4</span></label>
+  <label>persistence <input type="range" id="nPers" min="0.1" max="0.9" step="0.05" value="0.5"><span class="val" id="nPersv">0.50</span></label>
+  <label>waterLevel <input type="range" id="nWater" min="-1" max="1" step="0.05" value="-0.2"><span class="val" id="nWaterv">-0.20</span></label>
+
+  <button id="btnRegen">重新生成 / Regenerate</button>
+  <button id="btnWire" style="margin-top:6px">切换线框 / Toggle Wireframe</button>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color" style="background:#2980b9"></div>水域 Water</div>
+    <div class="legend-item"><div class="legend-color" style="background:#27ae60"></div>草地 Grass</div>
+    <div class="legend-item"><div class="legend-color" style="background:#8B6914"></div>山地 Mountain</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ecf0f1"></div>雪峰 Snow</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1026);
+scene.fog = new THREE.FogExp2(0x0b1026, 0.02);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(12, 10, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+ctrl.maxPolarAngle = Math.PI * 0.48;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dl = new THREE.DirectionalLight(0xffe8c0, 1.2);
+dl.position.set(10, 15, 8);
+scene.add(dl);
+const hl = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.35);
+scene.add(hl);
+
+// ── 简易噪声函数 / Simple noise function (value noise) ──
+// 伪随机哈希 / Pseudo-random hash
+function hash(x, y) {
+  let n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+// 平滑插值 / Smooth interpolation
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+// 值噪声 / Value noise
+function valueNoise(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const a = hash(ix, iy), b = hash(ix + 1, iy);
+  const c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+  const ux = smoothstep(fx), uy = smoothstep(fy);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+// 分形噪声 (FBM) / Fractal Brownian Motion
+function fbm(x, y, octaves, persistence) {
+  let total = 0, freq = 1, amp = 1, maxVal = 0;
+  for (let i = 0; i < octaves; i++) {
+    total += valueNoise(x * freq, y * freq) * amp;
+    maxVal += amp;
+    amp *= persistence;
+    freq *= 2;
+  }
+  return total / maxVal;
+}
+
+// ── 地形参数 / Terrain parameters ──
+const SEGS = 128; // 分段数 / segment count
+const SIZE = 24;  // 地形大小 / terrain size
+let wireframe = false;
+let terrainMesh = null;
+
+// 生成地形 / Generate terrain
+function generateTerrain() {
+  const scale = +document.getElementById('nScale').value;
+  const amp = +document.getElementById('nAmp').value;
+  const octaves = +document.getElementById('nOct').value;
+  const pers = +document.getElementById('nPers').value;
+  const waterLevel = +document.getElementById('nWater').value;
+
+  if (terrainMesh) { terrainMesh.geometry.dispose(); scene.remove(terrainMesh); }
+
+  // 创建高分辨率平面 / Create high-res plane
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGS, SEGS);
+  geo.rotateX(-Math.PI / 2); // 水平放置 / Lay flat
+
+  const pos = geo.attributes.position;
+  const colors = [];
+
+  // 颜色定义 / Color definitions
+  const cWater = new THREE.Color(0x2980b9);
+  const cSand = new THREE.Color(0xf0d9a0);
+  const cGrass = new THREE.Color(0x27ae60);
+  const cMountain = new THREE.Color(0x8B6914);
+  const cSnow = new THREE.Color(0xecf0f1);
+
+  // 修改顶点高度并着色 / Modify vertex heights and color them
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+
+    // 归一化坐标 / Normalized coordinates
+    const nx = (x + SIZE / 2) / SIZE;
+    const nz = (z + SIZE / 2) / SIZE;
+
+    // 计算高度 / Compute height
+    let h = fbm(nx * scale, nz * scale, octaves, pers) * amp;
+    // 边缘衰减 / Edge falloff
+    const dx = (nx - 0.5) * 2, dz = (nz - 0.5) * 2;
+    const edgeDist = 1 - Math.max(Math.abs(dx), Math.abs(dz));
+    h *= Math.max(0, edgeDist);
+
+    pos.setY(i, h);
+
+    // 根据高度着色 / Color based on height
+    const normalizedH = h / amp;
+    let color;
+    if (normalizedH < waterLevel) {
+      color = cWater.clone();
+    } else if (normalizedH < waterLevel + 0.1) {
+      color = cSand.clone().lerp(cGrass, (normalizedH - waterLevel) / 0.1);
+    } else if (normalizedH < 0.5) {
+      color = cGrass.clone().lerp(cMountain, (normalizedH - waterLevel - 0.1) / (0.5 - waterLevel - 0.1));
+    } else if (normalizedH < 0.75) {
+      color = cMountain.clone().lerp(cSnow, (normalizedH - 0.5) / 0.25);
+    } else {
+      color = cSnow.clone();
+    }
+    colors.push(color.r, color.g, color.b);
+  }
+
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    wireframe: wireframe,
+    flatShading: false,
+    roughness: 0.85,
+    metalness: 0.05,
+  });
+
+  terrainMesh = new THREE.Mesh(geo, mat);
+  scene.add(terrainMesh);
+
+  // 水面 / Water plane
+  // (简单半透明平面 / Simple semi-transparent plane)
+}
+
+generateTerrain();
+
+// ── 水面 / Water plane ──
+const waterGeo = new THREE.PlaneGeometry(SIZE, SIZE);
+waterGeo.rotateX(-Math.PI / 2);
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0x2980b9, transparent: true, opacity: 0.45,
+  roughness: 0.1, metalness: 0.3,
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.position.y = -0.15;
+scene.add(water);
+
+// ── 滑块绑定 / Slider bindings ──
+const binds = [
+  ['nScale','nScalev',1], ['nAmp','nAmpv',1], ['nOct','nOctv',0],
+  ['nPers','nPersv',2], ['nWater','nWaterv',2],
+];
+binds.forEach(([id, vid, dec]) => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+document.getElementById(id).value).toFixed(dec);
+    generateTerrain();
+  });
+});
+
+document.getElementById('btnRegen').addEventListener('click', generateTerrain);
+document.getElementById('btnWire').addEventListener('click', () => {
+  wireframe = !wireframe;
+  if (terrainMesh) terrainMesh.material.wireframe = wireframe;
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画 / Animate ──
+function animate() {
+  requestAnimationFrame(animate);
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

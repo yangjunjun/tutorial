@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 - 光源对比 / All Lights Comparison</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #111; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    /* 信息面板 / Info panel */
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.6; max-width: 300px;
+      z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    /* 四个标签覆盖层 / Four label overlays */
+    .scene-label {
+      position: absolute; color: #fff; font-size: 14px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 4px;
+      pointer-events: none; z-index: 5;
+    }
+    #label0 { top: 10px; left: 50%; transform: translateX(-120%); }
+    #label1 { top: 10px; left: 50%; transform: translateX(20%); }
+    #label2 { top: 50%; left: 50%; transform: translate(-120%, 10px); }
+    #label3 { top: 50%; left: 50%; transform: translate(20%, 10px); }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>光源对比 / All Lights Comparison</h2>
+    <p>四个视口使用相同的物体，但不同的光源。<br>
+       Four viewports with the same objects but different light types.</p>
+    <p style="margin-top:6px; font-size:12px; color:#aaa;">
+      左上: 环境光 | 右上: 平行光<br>
+      左下: 点光源 | 右下: 聚光灯<br>
+      TL: Ambient | TR: Directional<br>
+      BL: Point | BR: Spot
+    </p>
+  </div>
+
+  <!-- 四个场景标签 / Four scene labels -->
+  <div class="scene-label" id="label0">环境光 / AmbientLight</div>
+  <div class="scene-label" id="label1">平行光 / DirectionalLight</div>
+  <div class="scene-label" id="label2">点光源 / PointLight</div>
+  <div class="scene-label" id="label3">聚光灯 / SpotLight</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 渲染器（自动清除）/ Renderer (autoClear off for multi-viewport) =====
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.autoClear = false; // 手动清除 / Manual clear for multi-viewport
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 创建统一物体工厂 / Factory to create identical object sets =====
+    function createObjects(scene) {
+      const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.1 });
+      // 立方体 / Cube
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), mat(0xe74c3c));
+      cube.position.set(-1.2, 0.45, 0);
+      cube.castShadow = true; cube.receiveShadow = true;
+      scene.add(cube);
+      // 球体 / Sphere
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), mat(0x3498db));
+      sphere.position.set(0, 0.5, 0);
+      sphere.castShadow = true; sphere.receiveShadow = true;
+      scene.add(sphere);
+      // 圆环结 / TorusKnot
+      const tk = new THREE.Mesh(new THREE.TorusKnotGeometry(0.35, 0.1, 64, 12), mat(0x2ecc71));
+      tk.position.set(1.2, 0.6, 0);
+      tk.castShadow = true; tk.receiveShadow = true;
+      scene.add(tk);
+      // 地面 / Ground
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x666677, roughness: 0.8 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      return { cube, sphere, tk };
+    }
+
+    // ===== 创建四个场景 / Create four scenes =====
+    const scenes = [];
+    const cameras = [];
+    const objects = [];
+
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Scene();
+      s.background = new THREE.Color(0x1a1a2e);
+
+      const c = new THREE.PerspectiveCamera(50, 1, 0.1, 50);
+      c.position.set(3, 3, 4);
+      c.lookAt(0, 0.5, 0);
+
+      scenes.push(s);
+      cameras.push(c);
+      objects.push(createObjects(s));
+    }
+
+    // ===== 为每个场景配置不同光源 / Different lighting for each scene =====
+
+    // 0: 仅环境光 / Ambient only
+    scenes[0].add(new THREE.AmbientLight(0xffffff, 0.6));
+
+    // 1: 平行光 / Directional
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(3, 5, 3);
+    dirLight.castShadow = true;
+    scenes[1].add(dirLight);
+    scenes[1].add(new THREE.AmbientLight(0x404060, 0.2));
+
+    // 2: 点光源 / Point
+    const ptLight = new THREE.PointLight(0xffaa44, 3, 10, 2);
+    ptLight.position.set(0, 3, 0);
+    ptLight.castShadow = true;
+    scenes[2].add(ptLight);
+    // 发光球体 / Glowing bulb
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffaa44 })
+    );
+    bulb.position.copy(ptLight.position);
+    scenes[2].add(bulb);
+    scenes[2].add(new THREE.AmbientLight(0x111122, 0.3));
+
+    // 3: 聚光灯 / Spot
+    const spotLight = new THREE.SpotLight(0xffffff, 4, 15, 0.6, 0.3, 2);
+    spotLight.position.set(0, 5, 2);
+    spotLight.target.position.set(0, 0, 0);
+    spotLight.castShadow = true;
+    scenes[3].add(spotLight);
+    scenes[3].add(spotLight.target);
+    scenes[3].add(new THREE.AmbientLight(0x222233, 0.3));
+
+    // ===== OrbitControls（仅控制第一个视口）/ OrbitControls (main viewport) =====
+    const controls = new OrbitControls(cameras[0], renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0.5, 0);
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      cameras.forEach(c => {
+        c.aspect = 1; // 保持正方形视口 / Keep square viewport
+        c.updateProjectionMatrix();
+      });
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const hw = Math.floor(w / 2);
+      const hh = Math.floor(h / 2);
+
+      // 四个视口位置 / Four viewport positions
+      const viewports = [
+        { x: 0,  y: hh, w: hw, h: hh }, // 左上 / Top-left
+        { x: hw, y: hh, w: hw, h: hh }, // 右上 / Top-right
+        { x: 0,  y: 0,  w: hw, h: hh }, // 左下 / Bottom-left
+        { x: hw, y: 0,  w: hw, h: hh }, // 右下 / Bottom-right
+      ];
+
+      renderer.clear();
+
+      for (let i = 0; i < 4; i++) {
+        const vp = viewports[i];
+        renderer.setViewport(vp.x, vp.y, vp.w, vp.h);
+        renderer.setScissor(vp.x, vp.y, vp.w, vp.h);
+        renderer.setScissorTest(true);
+
+        // 同步相机到其他视口 / Sync cameras to match first
+        if (i > 0) {
+          cameras[i].position.copy(cameras[0].position);
+          cameras[i].quaternion.copy(cameras[0].quaternion);
+        }
+        cameras[i].aspect = vp.w / vp.h;
+        cameras[i].updateProjectionMatrix();
+
+        // 轻微旋转物体 / Gently rotate objects
+        objects[i].cube.rotation.y += 0.005;
+        objects[i].tk.rotation.y += 0.008;
+
+        renderer.render(scenes[i], cameras[i]);
+      }
+
+      controls.update();
+    }
+    animate();
+  </script>
+</body>
+</html>

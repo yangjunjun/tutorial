@@ -1,0 +1,86 @@
+# ============================================
+# 开发环境配置（application-dev.yml）
+# ============================================
+# 仅当 spring.profiles.active=dev 时生效
+# 本章新增了数据源配置，用于连接 MySQL 数据库
+# ============================================
+
+spring:
+  # 数据源配置
+  # Spring Boot 会自动识别此配置并创建 DataSource Bean
+  datasource:
+    # MySQL 连接 URL
+    # 参数详解：
+    #   useUnicode=true              - 使用 Unicode 字符集（支持中文等多语言字符）
+    #   characterEncoding=utf-8      - 字符编码为 UTF-8
+    #   serverTimezone=Asia/Shanghai - 服务器时区为中国标准时间（避免时间偏差 8 小时）
+    #   allowPublicKeyRetrieval=true - 允许获取 MySQL 公钥（caching_sha2_password 认证方式需要）
+    #   useSSL=false                 - 关闭 SSL 连接（开发环境关闭，生产环境建议开启）
+    url: jdbc:mysql://localhost:3306/blog_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+
+    # 数据库用户名
+    username: root
+
+    # 数据库密码（请根据你安装 MySQL 时设置的密码进行修改）
+    password: root123456
+
+    # MySQL JDBC 驱动类名
+    # Spring Boot 可以根据 URL 自动识别，但显式指定更清晰
+    # 注意：MySQL 8 使用 com.mysql.cj.jdbc.Driver
+    #       MySQL 5.x 使用 com.mysql.jdbc.Driver（已废弃）
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# ============================================
+# MyBatis-Plus 配置
+# ============================================
+mybatis-plus:
+  # Mapper XML 文件位置（用于自定义 SQL）
+  # classpath: 表示从 resources 目录下查找
+  # 当需要编写复杂 SQL（如多表关联查询）时，可以在 XML 中定义
+  mapper-locations: classpath:mapper/*.xml
+
+  # 实体类别名包
+  # 在 XML 中可以使用简短类名（如 User）而不是全限定名（如 com.example.blog.entity.User）
+  type-aliases-package: com.example.blog.entity
+
+  # MyBatis 核心配置
+  configuration:
+    # 开启驼峰命名自动映射
+    # 数据库列 create_time -> Java 字段 createTime
+    # 这是 MyBatis 的默认行为，显式配置更清晰
+    map-underscore-to-camel-case: true
+
+    # 开启 SQL 日志输出（开发环境使用）
+    # StdOutImpl 会将执行的 SQL 语句、参数、结果打印到控制台
+    # 生产环境应关闭此选项（改为 SLF4J 日志或直接移除）
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+  # 全局配置
+  global-config:
+    db-config:
+      # 主键类型：使用数据库自增
+      id-type: auto
+      # 逻辑删除配置（可选，本项目暂未启用）
+      # 启用后，deleteById() 会执行 UPDATE ... SET deleted = 1
+      # 而非物理删除 DELETE FROM ...
+      # logic-delete-field: deleted
+      # logic-delete-value: 1
+      # logic-not-delete-value: 0
+
+# ============================================
+# 服务器配置
+# ============================================
+server:
+  port: 8080
+
+# ============================================
+# 日志配置
+# ============================================
+logging:
+  level:
+    # 项目包的日志级别
+    com.example.blog: debug
+    # MyBatis 相关日志（可以看到 SQL 语句）
+    com.example.blog.mapper: debug
+    # Spring Web 层
+    org.springframework.web: info

@@ -1,0 +1,28 @@
+{
+  "name": "fullstack-backend",
+  "version": "1.0.0",
+  "description": "全栈应用后端 API 服务",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon --inspect=0.0.0.0:9229 src/app.js",
+    "migrate": "node src/migrate.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.4.1",
+    "morgan": "^1.10.0",
+    "pg": "^8.13.0",
+    "winston": "^3.14.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

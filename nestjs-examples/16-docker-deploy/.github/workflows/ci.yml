@@ -1,0 +1,218 @@
+# =============================================================================
+# CI/CD 持续集成 / 持续部署 工作流
+# =============================================================================
+#
+# 【GitHub Actions 简介】
+# GitHub Actions 是 GitHub 内置的 CI/CD 平台，可以自动化构建、测试和部署流程。
+# 工作流定义在 .github/workflows/ 目录下的 YAML 文件中。
+#
+# 【本工作流包含三个阶段】
+# 1. lint-and-test  → 代码检查和测试
+# 2. build          → 构建 Docker 镜像
+# 3. deploy         → 部署到生产环境（占位）
+#
+# 【触发条件】
+# - push 到 main 或 develop 分支
+# - 向 main 分支发起 Pull Request
+# =============================================================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# 全局环境变量
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 阶段 1: 代码检查和测试
+  # ---------------------------------------------------------------------------
+  # 目的：确保代码质量和功能正确性
+  # 运行时机：每次 push 和 PR
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    # 超时保护：防止测试卡死
+    timeout-minutes: 15
+
+    steps:
+      # 步骤 1: 检出代码
+      # actions/checkout 将仓库代码拉取到 runner 的工作目录
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤 2: 安装 pnpm
+      # pnpm/action-setup 会读取 package.json 中的 packageManager 字段
+      # 如果没有指定，会安装最新版本
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      # 步骤 3: 安装 Node.js
+      # setup-node 会设置 Node.js 环境并配置 pnpm 缓存
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'  # 启用 pnpm 缓存加速依赖安装
+
+      # 步骤 4: 安装项目依赖
+      # --frozen-lockfile 确保依赖与 lock 文件一致
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 步骤 5: 代码规范检查
+      # ESLint 检查代码风格和潜在问题
+      - name: Run linter
+        run: pnpm lint
+
+      # 步骤 6: 运行单元测试
+      - name: Run tests
+        run: pnpm test
+
+      # 步骤 7: 运行覆盖率测试
+      # 生成覆盖率报告，用于后续分析
+      - name: Run coverage tests
+        run: pnpm test:cov
+
+      # 步骤 8: 上传覆盖率报告
+      # 保存为 GitHub Actions 的 artifact，可以在 Actions 页面下载查看
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()  # 即使测试失败也上传覆盖率报告
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30  # 保留 30 天
+
+  # ---------------------------------------------------------------------------
+  # 阶段 2: 构建 Docker 镜像
+  # ---------------------------------------------------------------------------
+  # 目的：验证 Dockerfile 能正确构建镜像
+  # 依赖：lint-and-test 阶段必须通过
+  # 运行时机：每次 push（不运行在 PR 上）
+  build:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    # 仅在 push 时构建镜像，PR 只需要通过测试即可
+    if: github.event_name == 'push'
+
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 构建 Docker 镜像
+      # -t 指定镜像名称和标签
+      # 使用 commit SHA 作为标签，确保每次构建唯一
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t nestjs-app:${{ github.sha }} \
+            -t nestjs-app:latest \
+            .
+
+      # 测试 Docker 镜像
+      # 1. 以后台模式启动容器
+      # 2. 等待应用启动（sleep 5）
+      # 3. 调用健康检查端点验证服务正常
+      # 4. 停止并删除容器
+      - name: Test Docker image
+        run: |
+          # 启动容器
+          docker run -d --name test-app -p 3000:3000 nestjs-app:latest
+
+          # 等待应用启动
+          echo "等待应用启动..."
+          sleep 5
+
+          # 验证健康检查端点
+          echo "检查健康状态..."
+          curl -f http://localhost:3000/health/live || (echo "健康检查失败！" && exit 1)
+
+          # 验证 API 端点
+          echo "检查 API 响应..."
+          curl -f http://localhost:3000/ || (echo "API 检查失败！" && exit 1)
+
+          # 清理：停止并删除容器
+          docker stop test-app
+          docker rm test-app
+
+          echo "✅ Docker 镜像测试通过！"
+
+      # 查看镜像大小（便于监控镜像体积变化）
+      - name: Check image size
+        run: |
+          echo "镜像大小："
+          docker images nestjs-app:latest --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+  # ---------------------------------------------------------------------------
+  # 阶段 3: 部署到生产环境
+  # ---------------------------------------------------------------------------
+  # 目的：将通过测试和构建的代码部署到生产环境
+  # 依赖：build 阶段必须通过
+  # 运行时机：仅在 push 到 main 分支时触发
+  #
+  # 【注意】这是一个占位部署步骤
+  # 实际部署需要根据目标平台配置：
+  # - AWS ECS/EKS: 使用 aws-actions/amazon-ecr-login
+  # - GCP GKE:    使用 google-github-actions/deploy-gke
+  # - Azure AKS:  使用 azure/aks-deploy
+  # - 自托管:     使用 SSH + docker compose
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    # 仅在主分支 push 时部署
+    if: github.ref == 'refs/heads/main'
+
+    # 部署环境标识（GitHub Environments）
+    environment:
+      name: production
+      url: https://your-app.example.com
+
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 部署步骤（占位）
+      # 实际部署时替换为真实的部署命令
+      - name: Deploy to production
+        run: |
+          echo "============================================"
+          echo "  部署到生产环境（占位步骤）"
+          echo "============================================"
+          echo ""
+          echo "部署信息："
+          echo "  提交: ${{ github.sha }}"
+          echo "  分支: ${{ github.ref_name }}"
+          echo "  作者: ${{ github.actor }}"
+          echo ""
+          echo "实际部署需要配置："
+          echo "  1. 目标服务器的 SSH 密钥或云平台的访问凭证"
+          echo "  2. 容器镜像仓库（如 Docker Hub, ECR, GCR）"
+          echo "  3. Kubernetes manifest 或 docker-compose 配置"
+          echo "  4. 健康检查和回滚策略"
+
+      # 部署通知（可选）
+      # 可以集成 Slack、钉钉、飞书等通知渠道
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 部署成功！"
+          else
+            echo "❌ 部署失败，请检查日志！"
+          fi

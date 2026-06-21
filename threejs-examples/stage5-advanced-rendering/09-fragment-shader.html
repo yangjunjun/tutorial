@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>片元着色器 / Fragment Shader</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a1a; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.85); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 380px; font-size: 13px; line-height: 1.5;
+            z-index: 10; max-height: 90vh; overflow-y: auto;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #fc8; }
+        .mode-btn {
+            display: inline-block; padding: 5px 10px; margin: 4px 3px 0 0;
+            border: 1px solid #fc8; background: transparent; color: #fc8;
+            border-radius: 4px; cursor: pointer; font-size: 11px; transition: all 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active { background: #fc8; color: #000; }
+        .code-block {
+            background: rgba(0,0,0,0.5); padding: 6px 8px; margin: 6px 0;
+            border-radius: 4px; font-family: 'Courier New', monospace; font-size: 10px;
+            color: #ff8; border-left: 3px solid #fc8; line-height: 1.3;
+            white-space: pre-wrap; max-height: 200px; overflow-y: auto;
+        }
+        #mousePos { color: #888; font-size: 11px; margin-top: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>片元着色器 / Fragment Shader</h2>
+    <p>自定义片元着色器在每个像素上运行，可以生成任意图案和效果。</p>
+    <p style="color:#888;">Fragment shaders run per-pixel, generating any pattern or effect.</p>
+    <div style="margin-top:8px;">
+        <button class="mode-btn active" data-mode="gradient">渐变 Gradient</button>
+        <button class="mode-btn" data-mode="checker">棋盘 Checker</button>
+        <button class="mode-btn" data-mode="circles">同心圆 Circles</button>
+        <button class="mode-btn" data-mode="plasma">等离子 Plasma</button>
+        <button class="mode-btn" data-mode="noise">噪声 Noise</button>
+    </div>
+    <div id="codePanel" class="code-block"></div>
+    <p id="mousePos">鼠标位置 / Mouse: (0.00, 0.00)</p>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a1a);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enableRotate = false; // 禁用旋转以更好地查看全屏效果 / Disable rotation for fullscreen view
+
+// ============ 片元着色器定义 / Fragment Shader Definitions ============
+
+// 通用顶点着色器 / Common vertex shader
+const vertexShader = /* glsl */`
+    varying vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+
+// 1. 渐变 - 线性 + 径向
+// 1. Gradient - linear + radial
+const gradientFrag = /* glsl */`
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec2 uMouse;
+    varying vec2 vUv;
+    void main() {
+        // 线性渐变 / Linear gradient
+        vec3 linearGrad = vec3(vUv.x, vUv.y, sin(uTime * 0.5) * 0.5 + 0.5);
+        // 径向渐变（以鼠标为中心）/ Radial gradient (centered at mouse)
+        float dist = distance(vUv, uMouse);
+        vec3 radialGrad = mix(vec3(1.0, 0.3, 0.1), vec3(0.1, 0.2, 0.8), dist * 2.0);
+        // 混合两种渐变 / Blend both gradients
+        vec3 color = mix(linearGrad, radialGrad, 0.5);
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+// 2. 棋盘格
+// 2. Checkerboard
+const checkerFrag = /* glsl */`
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec2 uMouse;
+    varying vec2 vUv;
+    void main() {
+        // 缩放UV坐标 / Scale UV coordinates
+        vec2 uv = vUv * 8.0;
+        // floor + mod 创建棋盘格 / floor + mod creates checkerboard
+        float checker = mod(floor(uv.x) + floor(uv.y), 2.0);
+        // 颜色随时间变化 / Colors change over time
+        vec3 c1 = vec3(0.1 + sin(uTime * 0.3) * 0.1, 0.1, 0.2);
+        vec3 c2 = vec3(0.9, 0.8 + cos(uTime * 0.5) * 0.1, 0.2);
+        vec3 color = mix(c1, c2, checker);
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+// 3. 同心圆
+// 3. Concentric circles
+const circlesFrag = /* glsl */`
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec2 uMouse;
+    varying vec2 vUv;
+    void main() {
+        // 中心距离 / Distance from center
+        vec2 center = vec2(0.5);
+        float dist = distance(vUv, center);
+        // 使用 sin 创建同心圆环 / Use sin for concentric rings
+        float rings = sin(dist * 30.0 - uTime * 3.0) * 0.5 + 0.5;
+        // HSL 到 RGB 的简化色彩 / Simplified HSL-like coloring
+        vec3 color = vec3(
+            sin(rings * 3.14 + 0.0) * 0.5 + 0.5,
+            sin(rings * 3.14 + 2.09) * 0.5 + 0.5,
+            sin(rings * 3.14 + 4.18) * 0.5 + 0.5
+        );
+        // 鼠标交互 - 改变波纹中心 / Mouse interaction - change ripple center
+        float mouseDist = distance(vUv, uMouse);
+        float mouseRings = sin(mouseDist * 40.0 - uTime * 4.0) * 0.3;
+        color += vec3(mouseRings * 0.5);
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+// 4. 等离子效果（动画）
+// 4. Plasma effect (animated)
+const plasmaFrag = /* glsl */`
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec2 uMouse;
+    varying vec2 vUv;
+    void main() {
+        vec2 p = vUv * 4.0 - 2.0;
+        float t = uTime * 0.8;
+        // 多个 sin/cos 叠加产生等离子效果
+        // Multiple sin/cos layers create plasma effect
+        float v1 = sin(p.x * 2.0 + t);
+        float v2 = sin(p.y * 2.0 + t * 0.7);
+        float v3 = sin(p.x * 2.0 + p.y * 2.0 + t * 1.3);
+        float v4 = sin(length(p) * 3.0 - t * 1.5);
+        float v = (v1 + v2 + v3 + v4) * 0.25;
+        // 映射到颜色 / Map to color
+        vec3 color = vec3(
+            sin(v * 3.14159 + 0.0) * 0.5 + 0.5,
+            sin(v * 3.14159 + 2.094) * 0.5 + 0.5,
+            sin(v * 3.14159 + 4.188) * 0.5 + 0.5
+        );
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+// 5. 程序化噪声
+// 5. Procedural noise
+const noiseFrag = /* glsl */`
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec2 uMouse;
+    varying vec2 vUv;
+
+    // 哈希函数 / Hash function
+    float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    // 值噪声 / Value noise
+    float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f); // smoothstep
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+    // 分形布朗运动 / Fractional Brownian Motion (FBM)
+    float fbm(vec2 p) {
+        float val = 0.0;
+        float amp = 0.5;
+        for (int i = 0; i < 6; i++) {
+            val += amp * noise(p);
+            p *= 2.0;
+            amp *= 0.5;
+        }
+        return val;
+    }
+    void main() {
+        vec2 p = vUv * 4.0;
+        // 域扭曲 / Domain warping
+        float n1 = fbm(p + uTime * 0.1);
+        float n2 = fbm(p + n1 * 2.0 + uTime * 0.15);
+        float n3 = fbm(p + n2 * 2.0);
+        // 最终颜色 / Final color
+        vec3 color = mix(
+            vec3(0.05, 0.1, 0.2),
+            vec3(0.8, 0.4, 0.2),
+            n3
+        );
+        color = mix(color, vec3(0.1, 0.5, 0.3), n2 * 0.5);
+        // 鼠标影响 / Mouse influence
+        float mouseInfluence = 1.0 - smoothstep(0.0, 0.3, distance(vUv, uMouse));
+        color += vec3(0.2, 0.1, 0.3) * mouseInfluence;
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+// 着色器集合 / Shader collection
+const shaderModes = {
+    gradient: { frag: gradientFrag, name: '渐变 Gradient' },
+    checker: { frag: checkerFrag, name: '棋盘 Checker' },
+    circles: { frag: circlesFrag, name: '同心圆 Circles' },
+    plasma: { frag: plasmaFrag, name: '等离子 Plasma' },
+    noise: { frag: noiseFrag, name: '噪声 Noise' }
+};
+
+// ============ 创建全屏平面 / Create Fullscreen Plane ============
+const planeGeo = new THREE.PlaneGeometry(4, 4);
+
+const uniforms = {
+    uTime: { value: 0.0 },
+    uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    uMouse: { value: new THREE.Vector2(0.5, 0.5) }
+};
+
+const material = new THREE.ShaderMaterial({
+    vertexShader: vertexShader,
+    fragmentShader: gradientFrag,
+    uniforms: uniforms
+});
+
+const mesh = new THREE.Mesh(planeGeo, material);
+scene.add(mesh);
+
+// ============ 鼠标跟踪 / Mouse Tracking ============
+renderer.domElement.addEventListener('mousemove', (e) => {
+    const mx = e.clientX / window.innerWidth;
+    const my = 1.0 - e.clientY / window.innerHeight;
+    uniforms.uMouse.value.set(mx, my);
+    document.getElementById('mousePos').textContent =
+        `鼠标位置 / Mouse: (${mx.toFixed(2)}, ${my.toFixed(2)})`;
+});
+
+// ============ 模式切换 / Mode Switching ============
+function switchMode(mode) {
+    material.fragmentShader = shaderModes[mode].frag;
+    material.needsUpdate = true;
+    updateCodeDisplay(mode);
+}
+
+function updateCodeDisplay(mode) {
+    const code = shaderModes[mode].frag.trim();
+    const shortCode = code.substring(0, 600) + (code.length > 600 ? '\n...' : '');
+    document.getElementById('codePanel').textContent = shortCode;
+}
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        switchMode(btn.dataset.mode);
+    });
+});
+
+updateCodeDisplay('gradient');
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    uniforms.uResolution.value.set(w, h);
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    uniforms.uTime.value = clock.getElapsedTime();
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>练习：模型查看器 / Practice: Model Viewer — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; }
+    canvas { display: block; }
+
+    /* 信息面板 / Info panel */
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 300px;
+      pointer-events: none; backdrop-filter: blur(6px); z-index: 20;
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #e17055; }
+    #info .stat { color: #fab1a0; }
+
+    /* 拖拽区域 / Drop zone */
+    #dropzone {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 380px; padding: 50px 30px;
+      border: 3px dashed rgba(225,112,85,0.6); border-radius: 16px;
+      background: rgba(0,0,0,0.6); color: #e17055;
+      text-align: center; font-size: 16px;
+      cursor: pointer; transition: border-color .3s, background .3s;
+      backdrop-filter: blur(8px); z-index: 10;
+    }
+    #dropzone.hover { border-color: #fab1a0; background: rgba(225,112,85,0.12); }
+    #dropzone.hidden { display: none; }
+    #dropzone .icon { font-size: 48px; margin-bottom: 12px; }
+    #dropzone p { margin: 6px 0; font-size: 13px; color: #ccc; }
+    #fileInput { display: none; }
+
+    /* 侧边面板 / Side panel */
+    #panel {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.80); color: #fff;
+      padding: 18px 20px; border-radius: 12px;
+      font-size: 13px; width: 260px; max-height: 92vh; overflow-y: auto;
+      backdrop-filter: blur(8px); z-index: 15;
+    }
+    #panel.hidden { display: none; }
+    #panel h3 { color: #e17055; margin: 12px 0 6px; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    #panel h3:first-child { margin-top: 0; }
+    #panel label { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; }
+    #panel input[type=range] { width: 100px; accent-color: #e17055; }
+    #panel input[type=color] { width: 36px; height: 24px; border: none; border-radius: 4px; cursor: pointer; }
+    #panel .val { color: #fab1a0; min-width: 36px; text-align: right; }
+    .chk-row { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; }
+    .chk-row input { accent-color: #e17055; }
+    #panel select {
+      width: 100%; background: #333; color: #fff; border: 1px solid #555;
+      border-radius: 4px; padding: 5px 8px; font-size: 12px; margin-top: 4px;
+    }
+    .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+    .btn-row button {
+      flex: 1; padding: 7px 8px; border: 1px solid #e17055; background: transparent; color: #e17055;
+      border-radius: 6px; cursor: pointer; font-size: 12px; transition: background .2s;
+    }
+    .btn-row button:hover { background: rgba(225,112,85,0.2); }
+    .btn-row button.active { background: rgba(225,112,85,0.3); }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>练习：模型查看器 / Practice: Model Viewer</h2>
+  全功能GLTF模型查看器<br/>
+  Full-featured GLTF model viewer<br/>
+  <span class="stat" id="modelStats"></span>
+</div>
+
+<div id="dropzone">
+  <div class="icon">&#128230;</div>
+  <strong>拖拽 .glb 文件到此处</strong>
+  <p>Drag &amp; drop a .glb file here</p>
+  <p>or click to browse / 或点击浏览</p>
+</div>
+<input type="file" id="fileInput" accept=".glb,.gltf" />
+
+<div id="panel" class="hidden">
+  <h3>Scene / 场景</h3>
+  <label>背景色 BG <input type="color" id="bgColor" value="#1a1a2e"></label>
+  <div class="chk-row"><span>自动旋转 Auto-Rotate</span><input type="checkbox" id="autoRotate"></div>
+  <div class="chk-row"><span>线框 Wireframe</span><input type="checkbox" id="wireframe"></div>
+
+  <h3>Lights / 灯光</h3>
+  <label>主光 Key <input type="range" id="keyLight" min="0" max="5" step="0.1" value="1.5"><span class="val" id="keyLightv">1.5</span></label>
+  <label>补光 Fill <input type="range" id="fillLight" min="0" max="3" step="0.1" value="0.6"><span class="val" id="fillLightv">0.6</span></label>
+  <label>轮廓 Rim <input type="range" id="rimLight" min="0" max="3" step="0.1" value="0.8"><span class="val" id="rimLightv">0.8</span></label>
+  <label>环境 Ambient <input type="range" id="ambLight" min="0" max="2" step="0.05" value="0.3"><span class="val" id="ambLightv">0.30</span></label>
+
+  <h3>Animation / 动画</h3>
+  <div class="btn-row">
+    <button id="btnPlay" class="active">播放 Play</button>
+    <button id="btnPause">暂停 Pause</button>
+  </div>
+  <label style="margin-top:8px">速度 Speed <input type="range" id="animSpeed" min="0" max="3" step="0.1" value="1"><span class="val" id="animSpeedv">1.0</span></label>
+  <label>动画片段 Clip</label>
+  <select id="clipSelect"><option>无 No animation</option></select>
+
+  <h3>Actions / 操作</h3>
+  <div class="btn-row">
+    <button id="btnScreenshot">截图 Screenshot</button>
+    <button id="btnReset">重置 Reset</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 1000);
+camera.position.set(3, 3, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+// ── 轨道控制器（带阻尼和约束）/ OrbitControls with damping and constraints ──
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+ctrl.dampingFactor = 0.08;
+ctrl.minDistance = 0.5;
+ctrl.maxDistance = 50;
+ctrl.maxPolarAngle = Math.PI * 0.95;
+
+// ── 三点照明 / Three-point lighting ──
+const ambLight = new THREE.AmbientLight(0xffffff, 0.3);
+scene.add(ambLight);
+// 主光 Key light
+const keyLightObj = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLightObj.position.set(5, 8, 5);
+scene.add(keyLightObj);
+// 补光 Fill light
+const fillLightObj = new THREE.DirectionalLight(0x8888ff, 0.6);
+fillLightObj.position.set(-5, 3, -3);
+scene.add(fillLightObj);
+// 轮廓光 Rim light
+const rimLightObj = new THREE.DirectionalLight(0xffcc88, 0.8);
+rimLightObj.position.set(0, 2, -6);
+scene.add(rimLightObj);
+
+// ── 地面 / Ground ──
+const grid = new THREE.GridHelper(20, 20, 0x555566, 0x333344);
+scene.add(grid);
+
+// ── 全局状态 / Global state ──
+const loader = new GLTFLoader();
+const clock = new THREE.Clock();
+let currentModel = null, mixer = null, currentAction = null, clips = [];
+let playing = true;
+
+// UI 引用 / UI refs
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const panel = document.getElementById('panel');
+const statsEl = document.getElementById('modelStats');
+
+// ── 加载GLB / Load GLB ──
+function loadGLB(file) {
+  const url = URL.createObjectURL(file);
+  loader.load(url, (gltf) => {
+    // 清理 / Cleanup
+    if (currentModel) scene.remove(currentModel);
+    if (mixer) { mixer.stopAllAction(); mixer = null; }
+
+    currentModel = gltf.scene;
+    scene.add(currentModel);
+
+    // 自适应缩放 / Auto scale
+    const box = new THREE.Box3().setFromObject(currentModel);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 4 / maxDim;
+    currentModel.scale.setScalar(scale);
+
+    // 居中 / Center
+    const box2 = new THREE.Box3().setFromObject(currentModel);
+    const center = box2.getCenter(new THREE.Vector3());
+    currentModel.position.sub(center);
+    currentModel.position.y += box2.getSize(new THREE.Vector3()).y / 2;
+
+    // 统计 / Statistics
+    let verts = 0, meshCount = 0;
+    currentModel.traverse(c => {
+      if (c.isMesh) { meshCount++; verts += c.geometry.attributes.position.count; }
+    });
+    clips = gltf.animations || [];
+    statsEl.innerHTML =
+      `顶点 Vertices: ${verts.toLocaleString()} | 网格 Meshes: ${meshCount} | 动画 Clips: ${clips.length}`;
+
+    // 动画设置 / Animation setup
+    if (clips.length > 0) {
+      mixer = new THREE.AnimationMixer(currentModel);
+      const sel = document.getElementById('clipSelect');
+      sel.innerHTML = '';
+      clips.forEach((clip, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = clip.name || `Clip ${i}`;
+        sel.appendChild(opt);
+      });
+      currentAction = mixer.clipAction(clips[0]);
+      currentAction.play();
+      playing = true;
+    }
+
+    // 显示面板 / Show panel
+    panel.classList.remove('hidden');
+    dropzone.classList.add('hidden');
+    URL.revokeObjectURL(url);
+  }, undefined, (err) => {
+    console.error('加载失败:', err);
+    statsEl.textContent = '加载失败 Load failed: ' + err.message;
+  });
+}
+
+// ── 拖拽事件 / Drag & drop ──
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('hover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('hover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('hover');
+  if (e.dataTransfer.files.length) loadGLB(e.dataTransfer.files[0]);
+});
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer.files.length) loadGLB(e.dataTransfer.files[0]);
+});
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files.length) loadGLB(fileInput.files[0]); });
+
+// ── 面板控制 / Panel controls ──
+
+// 背景色 / Background color
+document.getElementById('bgColor').addEventListener('input', e => scene.background.set(e.target.value));
+
+// 自动旋转 / Auto-rotate
+document.getElementById('autoRotate').addEventListener('change', e => ctrl.autoRotate = e.target.checked);
+ctrl.autoRotateSpeed = 2.0;
+
+// 线框 / Wireframe
+document.getElementById('wireframe').addEventListener('change', e => {
+  if (currentModel) currentModel.traverse(c => { if (c.isMesh) c.material.wireframe = e.target.checked; });
+});
+
+// 灯光强度 / Light intensities
+[['keyLight', keyLightObj, 1], ['fillLight', fillLightObj, 1], ['rimLight', rimLightObj, 1], ['ambLight', ambLight, 2]].forEach(([id, light, dec]) => {
+  document.getElementById(id).addEventListener('input', e => {
+    light.intensity = +e.target.value;
+    document.getElementById(id + 'v').textContent = (+e.target.value).toFixed(dec);
+  });
+});
+
+// 动画播放/暂停 / Play/Pause
+document.getElementById('btnPlay').addEventListener('click', () => {
+  playing = true;
+  if (currentAction) { currentAction.paused = false; currentAction.play(); }
+  document.getElementById('btnPlay').classList.add('active');
+  document.getElementById('btnPause').classList.remove('active');
+});
+document.getElementById('btnPause').addEventListener('click', () => {
+  playing = false;
+  if (currentAction) currentAction.paused = true;
+  document.getElementById('btnPause').classList.add('active');
+  document.getElementById('btnPlay').classList.remove('active');
+});
+
+// 动画速度 / Animation speed
+document.getElementById('animSpeed').addEventListener('input', e => {
+  document.getElementById('animSpeedv').textContent = (+e.target.value).toFixed(1);
+});
+
+// 动画片段选择 / Clip selector
+document.getElementById('clipSelect').addEventListener('change', e => {
+  if (!mixer || !clips.length) return;
+  if (currentAction) currentAction.stop();
+  currentAction = mixer.clipAction(clips[+e.target.value]);
+  currentAction.play();
+  playing = true;
+});
+
+// 截图 / Screenshot
+document.getElementById('btnScreenshot').addEventListener('click', () => {
+  renderer.render(scene, camera); // 确保最新帧 / Ensure latest frame
+  renderer.domElement.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'screenshot.png';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, 'image/png');
+});
+
+// 重置 / Reset
+document.getElementById('btnReset').addEventListener('click', () => {
+  camera.position.set(3, 3, 5);
+  ctrl.target.set(0, 0, 0);
+  ctrl.update();
+  scene.background.set('#1a1a2e');
+  document.getElementById('bgColor').value = '#1a1a2e';
+  document.getElementById('autoRotate').checked = false;
+  ctrl.autoRotate = false;
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const speed = +document.getElementById('animSpeed').value;
+  if (mixer && playing) mixer.update(delta * speed);
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

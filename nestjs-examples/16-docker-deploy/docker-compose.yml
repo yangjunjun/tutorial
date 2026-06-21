@@ -1,0 +1,103 @@
+# =============================================================================
+# Docker Compose 配置文件
+# =============================================================================
+#
+# 【Docker Compose 简介】
+# Docker Compose 是 Docker 的编排工具，用于定义和运行多容器应用。
+# 通过 YAML 文件描述服务、网络和卷，一键启动整个应用栈。
+#
+# 【使用方式】
+# 启动生产环境：  docker compose up -d app
+# 启动开发环境：  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 查看所有服务：  docker compose ps
+# 查看日志：      docker compose logs -f
+# 停止所有服务：  docker compose down
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 生产环境应用服务
+  # ---------------------------------------------------------------------------
+  # 使用多阶段构建的最终阶段（production），只包含运行时文件
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production    # 指定构建目标为生产阶段
+    container_name: nestjs-app-prod
+    ports:
+      # 端口映射：宿主机端口:容器端口
+      - "3000:3000"
+    environment:
+      # 通过环境变量注入配置
+      # 生产环境敏感信息应使用 Docker Secrets 或密钥管理服务
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+    healthcheck:
+      # 健康检查配置 - 与 Dockerfile 中的 HEALTHCHECK 类似
+      # docker compose 级别的配置会覆盖 Dockerfile 中的设置
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # 自动重启策略：
+    # - no: 不自动重启
+    # - on-failure: 仅在非零退出码时重启
+    # - always: 总是重启
+    # - unless-stopped: 除非手动停止，否则总是重启
+    restart: unless-stopped
+    # 资源限制（生产环境建议配置）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'       # CPU 限制为 1 核
+          memory: 512M       # 内存限制为 512MB
+        reservations:
+          cpus: '0.25'      # CPU 预留 0.25 核
+          memory: 128M       # 内存预留 128MB
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"     # 单个日志文件最大 10MB
+        max-file: "3"       # 保留最近 3 个日志文件
+    networks:
+      - app-network
+
+  # ---------------------------------------------------------------------------
+  # 开发环境应用服务
+  # ---------------------------------------------------------------------------
+  # 使用 deps 阶段的镜像，包含所有开发依赖
+  # 通过 volume 挂载实现热重载
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps          # 使用依赖安装阶段（包含 devDependencies）
+    container_name: nestjs-app-dev
+    ports:
+      - "3001:3000"         # 使用不同端口，避免与生产服务冲突
+    volumes:
+      # 【卷挂载说明】
+      # 将本地源码挂载到容器内，修改文件会触发 NestJS 热重载
+      - .:/app
+      # 匿名卷：保留容器内的 node_modules，不被本地目录覆盖
+      # 这是一个常见技巧，避免本地和容器的 node_modules 冲突
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - LOG_LEVEL=debug
+    command: pnpm start:dev  # 使用 watch 模式启动
+    restart: unless-stopped
+    networks:
+      - app-network
+
+# 网络配置
+networks:
+  app-network:
+    driver: bridge           # 使用桥接网络模式

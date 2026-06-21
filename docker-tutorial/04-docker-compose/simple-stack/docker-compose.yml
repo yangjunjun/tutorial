@@ -1,0 +1,89 @@
+# ============================================================
+# 简单 Web 应用栈 - Docker Compose 配置
+# 架构：Node.js Web 应用 + Redis 缓存 + PostgreSQL 数据库
+# 启动命令：docker compose up -d
+# ============================================================
+
+services:
+  # ============ Web 应用层 ============
+  web:
+    build:
+      context: ../../02-dockerfile   # 引用 02-dockerfile 章节的 Node.js 应用
+      dockerfile: Dockerfile
+    container_name: simple-web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============ 缓存层 ============
+  redis:
+    image: redis:7-alpine
+    container_name: simple-redis
+    # 不暴露端口到宿主机，仅在内部网络通信（安全）
+    # 如需调试，可取消下行注释：
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ============ 数据层 ============
+  postgres:
+    image: postgres:15-alpine
+    container_name: simple-postgres
+    # 不暴露端口到宿主机（生产环境推荐）
+    # 如需本地连接调试，可取消注释：
+    # ports:
+    #   - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+# ============ 数据卷声明 ============
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ============ 网络配置 ============
+networks:
+  app-network:
+    driver: bridge

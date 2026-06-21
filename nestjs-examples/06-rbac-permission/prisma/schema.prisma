@@ -1,0 +1,47 @@
+// Prisma Schema 定义
+// 包含用户角色枚举、用户模型和商品模型
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 用户角色枚举
+// USER: 普通用户 - 只能浏览商品
+// MERCHANT: 商家 - 可以管理自己的商品
+// ADMIN: 管理员 - 可以管理所有商品和用户
+enum Role {
+  USER
+  MERCHANT
+  ADMIN
+}
+
+// 用户模型
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  email     String   @unique
+  role      Role     @default(USER)  // 默认角色为普通用户
+  createdAt DateTime @default(now())
+
+  // 一对多关系：一个用户可以拥有多个商品
+  products  Product[]
+}
+
+// 商品模型
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String                    // 商品名称
+  description String?                   // 商品描述（可选）
+  price       Float                     // 价格
+  stock       Int      @default(0)      // 库存
+  ownerId     Int                       // 所属商家ID
+  owner       User     @relation(fields: [ownerId], references: [id])  // 关联用户
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

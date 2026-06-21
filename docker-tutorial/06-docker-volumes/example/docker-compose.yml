@@ -1,0 +1,144 @@
+# ==============================================================================
+# Docker 数据持久化示例 - docker-compose.yml
+# 展示：命名卷、绑定挂载、共享卷、备份服务
+# ==============================================================================
+
+version: "3.9"
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 数据库 - 使用命名卷持久化数据
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: demo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # 命名卷：持久化数据库数据
+      - postgres_data:/var/lib/postgresql/data
+      # 绑定挂载：初始化脚本（只读）
+      - type: bind
+        source: ./init-scripts
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # 应用服务 - 使用绑定挂载加载配置文件
+  # --------------------------------------------------------------------------
+  app:
+    image: ${APP_IMAGE:-node:20-alpine}
+    container_name: demo-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    volumes:
+      # 绑定挂载：应用配置文件（只读）
+      - type: bind
+        source: ./config
+        target: /app/config
+        read_only: true
+      # 共享卷：上传文件存储（多容器共享）
+      - shared_uploads:/app/uploads
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # Nginx 反向代理 - 共享卷读取静态资源 + 绑定挂载配置文件
+  # --------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: demo-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    volumes:
+      # 绑定挂载：Nginx 配置文件（只读）
+      - type: bind
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+      - type: bind
+        source: ./nginx/conf.d
+        target: /etc/nginx/conf.d
+        read_only: true
+      # 共享卷：与应用共享的上传文件目录（只读）
+      - shared_uploads:/usr/share/nginx/html/uploads:ro
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # 备份服务 - 定时备份数据库
+  # --------------------------------------------------------------------------
+  backup:
+    image: postgres:16-alpine
+    container_name: demo-backup
+    volumes:
+      # 命名卷：需要备份的数据源（只读）
+      - postgres_data:/source:ro
+      # 绑定挂载：备份脚本
+      - type: bind
+        source: ./backup.sh
+        target: /scripts/backup.sh
+        read_only: true
+      # 绑定挂载：备份输出目录
+      - type: bind
+        source: ./backups
+        target: /backups
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    networks:
+      - app-network
+    profiles:
+      # 使用 profile 控制：不会随 docker compose up 自动启动
+      # 手动执行：docker compose run --rm backup
+      - backup
+
+# ==============================================================================
+# 命名卷定义
+# ==============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    labels:
+      app: demo
+      purpose: database-persistence
+
+  shared_uploads:
+    driver: local
+    labels:
+      app: demo
+      purpose: shared-file-storage
+
+# ==============================================================================
+# 网络定义
+# ==============================================================================
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>动态几何体 / Dynamic Geometry — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #160f29; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #c56cf0; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 230px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #c56cf0; margin: 8px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 100px; accent-color: #c56cf0; }
+    #controls .val { color: #c56cf0; min-width: 36px; text-align: right; }
+    .btn-group { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+    .btn-group button {
+      padding: 7px; border: 1px solid #c56cf0; background: transparent; color: #c56cf0;
+      border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .2s;
+    }
+    .btn-group button:hover, .btn-group button.active { background: rgba(197,108,240,0.22); }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>动态几何体 / Dynamic Geometry</h2>
+  实时动画顶点位置<br/>
+  Animate vertex positions in real-time<br/>
+  关键: geometry.attributes.position.needsUpdate = true<br/>
+  Key: mark position attribute as needsUpdate
+</div>
+
+<div id="controls">
+  <h3>变形模式 / Deformation Mode</h3>
+  <div class="btn-group">
+    <button id="btnWave" class="active">波浪 Wave</button>
+    <button id="btnBreathe">呼吸 Breathe</button>
+    <button id="btnNoise">噪声 Noise</button>
+  </div>
+
+  <h3>参数 / Parameters</h3>
+  <label>amplitude <input type="range" id="dAmp" min="0.05" max="1.5" step="0.05" value="0.4"><span class="val" id="dAmpv">0.40</span></label>
+  <label>frequency <input type="range" id="dFreq" min="0.5" max="8" step="0.1" value="3"><span class="val" id="dFreqv">3.0</span></label>
+  <label>speed <input type="range" id="dSpeed" min="0.2" max="5" step="0.1" value="1.5"><span class="val" id="dSpeedv">1.5</span></label>
+  <label>segments <input type="range" id="dSeg" min="8" max="96" step="4" value="48"><span class="val" id="dSegv">48</span></label>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x160f29);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 2, 6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dl = new THREE.DirectionalLight(0xffffff, 1.0);
+dl.position.set(5, 8, 5);
+scene.add(dl);
+const pl = new THREE.PointLight(0xc56cf0, 0.8, 20);
+pl.position.set(-3, 3, 3);
+scene.add(pl);
+
+// ── 时钟 / Clock ──
+const clock = new THREE.Clock();
+
+// ── 变形模式 / Deformation mode ──
+let mode = 'wave';
+
+// ── 球体和原始位置存储 / Sphere and original positions ──
+let mesh, originalPositions;
+
+function buildSphere() {
+  const seg = +document.getElementById('dSeg').value;
+  if (mesh) { mesh.geometry.dispose(); scene.remove(mesh); }
+
+  const geo = new THREE.SphereGeometry(2, seg, seg);
+  // 存储原始顶点位置 / Store original vertex positions
+  originalPositions = new Float32Array(geo.attributes.position.array);
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xc56cf0, metalness: 0.3, roughness: 0.4,
+    flatShading: true,
+  });
+  mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+}
+buildSphere();
+
+// ── 简易噪声 / Simple noise helper ──
+function pseudoNoise(x, y, z) {
+  return Math.sin(x * 1.7 + y * 2.3) * Math.cos(z * 1.3 + x * 0.7) * 0.5 + 0.5;
+}
+
+// ── 网格地面 / Ground ──
+scene.add(new THREE.GridHelper(16, 16, 0x444466, 0x333355));
+
+// ── 变形函数 / Deformation functions ──
+
+// 波浪模式 / Wave mode: sinusoidal displacement along Y
+function deformWave(positions, time, amp, freq) {
+  for (let i = 0; i < positions.length; i += 3) {
+    const ox = originalPositions[i];
+    const oy = originalPositions[i + 1];
+    const oz = originalPositions[i + 2];
+    // 沿法线方向位移（近似）/ Displace along approximate normal
+    const wave = Math.sin(ox * freq + time) * Math.cos(oz * freq + time * 0.7) * amp;
+    const len = Math.sqrt(ox * ox + oy * oy + oz * oz) || 1;
+    positions[i]     = ox + (ox / len) * wave;
+    positions[i + 1] = oy + (oy / len) * wave;
+    positions[i + 2] = oz + (oz / len) * wave;
+  }
+}
+
+// 呼吸模式 / Breathe mode: uniform pulsing
+function deformBreathe(positions, time, amp, freq) {
+  const scale = 1 + Math.sin(time * freq) * amp * 0.3;
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i]     = originalPositions[i] * scale;
+    positions[i + 1] = originalPositions[i + 1] * scale;
+    positions[i + 2] = originalPositions[i + 2] * scale;
+  }
+}
+
+// 噪声模式 / Noise mode: random vertex displacement
+function deformNoise(positions, time, amp, freq) {
+  for (let i = 0; i < positions.length; i += 3) {
+    const ox = originalPositions[i];
+    const oy = originalPositions[i + 1];
+    const oz = originalPositions[i + 2];
+    const n = pseudoNoise(ox * freq + time * 0.5, oy * freq + time * 0.3, oz * freq + time * 0.4);
+    const len = Math.sqrt(ox * ox + oy * oy + oz * oz) || 1;
+    const disp = (n - 0.5) * amp * 2;
+    positions[i]     = ox + (ox / len) * disp;
+    positions[i + 1] = oy + (oy / len) * disp;
+    positions[i + 2] = oz + (oz / len) * disp;
+  }
+}
+
+const deformFns = { wave: deformWave, breathe: deformBreathe, noise: deformNoise };
+
+// ── 按钮 / Buttons ──
+[['btnWave','wave'],['btnBreathe','breathe'],['btnNoise','noise']].forEach(([btnId, m]) => {
+  document.getElementById(btnId).addEventListener('click', (e) => {
+    mode = m;
+    document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+  });
+});
+
+// ── 滑块 / Sliders ──
+[['dAmp','dAmpv',2],['dFreq','dFreqv',1],['dSpeed','dSpeedv',1]].forEach(([id,vid,dec]) => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+document.getElementById(id).value).toFixed(dec);
+  });
+});
+document.getElementById('dSeg').addEventListener('input', () => {
+  document.getElementById('dSegv').textContent = document.getElementById('dSeg').value;
+  buildSphere();
+});
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画循环 / Animation loop ──
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (mesh) {
+    const elapsed = clock.getElapsedTime();
+    const amp = +document.getElementById('dAmp').value;
+    const freq = +document.getElementById('dFreq').value;
+    const speed = +document.getElementById('dSpeed').value;
+    const time = elapsed * speed;
+
+    const positions = mesh.geometry.attributes.position.array;
+    // 应用变形 / Apply deformation
+    deformFns[mode](positions, time, amp, freq);
+
+    // 关键：标记需要更新 / Key: mark attribute as needing update
+    mesh.geometry.attributes.position.needsUpdate = true;
+    // 重新计算法线以获得正确光照 / Recompute normals for correct lighting
+    mesh.geometry.computeVertexNormals();
+  }
+
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

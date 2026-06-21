@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒子系统 / Particle System</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 340px; font-size: 13px; line-height: 1.5;
+            z-index: 10;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #ff8; }
+        .mode-btn {
+            display: inline-block; padding: 5px 12px; margin: 4px 4px 0 0;
+            border: 1px solid #ff8; background: transparent; color: #ff8;
+            border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active { background: #ff8; color: #000; }
+        .slider-group { margin: 6px 0; }
+        .slider-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 2px; }
+        .slider-group input[type=range] {
+            width: 100%; height: 4px; -webkit-appearance: none;
+            background: #444; border-radius: 2px; outline: none;
+        }
+        .slider-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: #ff8; border-radius: 50%; cursor: pointer;
+        }
+        .val { float: right; color: #ff8; font-family: monospace; }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>粒子系统 / Particle System</h2>
+    <p>使用 Three.js Points 和 PointsMaterial 创建各种粒子效果。</p>
+    <p style="color:#888;">Create various particle effects with Points and PointsMaterial.</p>
+    <div style="margin-top:8px;">
+        <button class="mode-btn active" data-mode="starfield">星空 Stars</button>
+        <button class="mode-btn" data-mode="fountain">喷泉 Fountain</button>
+        <button class="mode-btn" data-mode="galaxy">银河 Galaxy</button>
+        <button class="mode-btn" data-mode="firefly">萤火虫 Firefly</button>
+    </div>
+    <div class="slider-group">
+        <label>粒子数量 Count <span class="val" id="vCount">10000</span></label>
+        <input type="range" id="count" min="1000" max="30000" step="1000" value="10000">
+    </div>
+    <div class="slider-group">
+        <label>粒子大小 Size <span class="val" id="vSize">2.0</span></label>
+        <input type="range" id="size" min="0.5" max="8" step="0.1" value="2.0">
+    </div>
+    <div class="slider-group">
+        <label>速度 Speed <span class="val" id="vSpeed">1.0</span></label>
+        <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1.0">
+    </div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050510);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 5, 15);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ============ 粒子系统状态 / Particle System State ============
+let currentMode = 'starfield';
+let particleCount = 10000;
+let particleSize = 2.0;
+let speedMultiplier = 1.0;
+let points = null;
+let geometry = null;
+let material = null;
+let velocities = null; // 喷泉/萤火虫用 / For fountain/firefly
+let originalPositions = null; // 保存初始位置 / Store original positions
+
+// ============ 粒子创建函数 / Particle Creation Functions ============
+
+function removeCurrentParticles() {
+    if (points) {
+        scene.remove(points);
+        geometry.dispose();
+        material.dispose();
+        points = null;
+    }
+}
+
+// 1. 星空 - 球形分布 / Starfield - Spherical distribution
+function createStarfield() {
+    geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+        // 球坐标随机分布 / Random spherical distribution
+        const radius = 5 + Math.random() * 45;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = radius * Math.cos(phi);
+
+        // 颜色：白到蓝到黄 / Colors: white to blue to yellow
+        const temp = Math.random();
+        if (temp < 0.7) { // 大多数是白色 / Most are white
+            colors[i * 3] = 0.8 + Math.random() * 0.2;
+            colors[i * 3 + 1] = 0.8 + Math.random() * 0.2;
+            colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+        } else if (temp < 0.85) { // 蓝色 / Blue
+            colors[i * 3] = 0.3 + Math.random() * 0.3;
+            colors[i * 3 + 1] = 0.4 + Math.random() * 0.3;
+            colors[i * 3 + 2] = 0.8 + Math.random() * 0.2;
+        } else { // 黄色 / Yellow
+            colors[i * 3] = 0.9 + Math.random() * 0.1;
+            colors[i * 3 + 1] = 0.8 + Math.random() * 0.2;
+            colors[i * 3 + 2] = 0.3 + Math.random() * 0.3;
+        }
+        sizes[i] = 0.5 + Math.random() * 2.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    material = new THREE.PointsMaterial({
+        size: particleSize * 0.01,
+        vertexColors: true,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+    });
+
+    points = new THREE.Points(geometry, material);
+    scene.add(points);
+}
+
+// 2. 喷泉 - 向上发射并受重力 / Fountain - Shoot up with gravity
+function createFountain() {
+    geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    velocities = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+        resetFountainParticle(i, positions, velocities, colors, true);
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    material = new THREE.PointsMaterial({
+        size: particleSize * 0.015,
+        vertexColors: true,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+
+    points = new THREE.Points(geometry, material);
+    scene.add(points);
+}
+
+function resetFountainParticle(i, positions, velocities, colors, randomize) {
+    // 初始位置：原点附近 / Start near origin
+    positions[i * 3] = (Math.random() - 0.5) * 0.5;
+    positions[i * 3 + 1] = randomize ? Math.random() * 8 : 0;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+
+    // 速度：向上扩散 / Velocity: upward spread
+    velocities[i * 3] = (Math.random() - 0.5) * 2;
+    velocities[i * 3 + 1] = 4 + Math.random() * 6;
+    velocities[i * 3 + 2] = (Math.random() - 0.5) * 2;
+
+    // 颜色：暖色系 / Warm colors
+    const hue = Math.random() * 0.1; // 红-橙 / Red-orange
+    const color = new THREE.Color().setHSL(hue, 1.0, 0.5 + Math.random() * 0.3);
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+}
+
+// 3. 银河 - 螺旋臂 / Galaxy - Spiral arms
+function createGalaxy() {
+    geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    const arms = 4; // 螺旋臂数量 / Number of spiral arms
+    for (let i = 0; i < particleCount; i++) {
+        const arm = i % arms;
+        const armAngle = (arm / arms) * Math.PI * 2;
+        const radius = Math.random() * 15;
+        // 螺旋角度 / Spiral angle
+        const spiralAngle = radius * 0.5 + armAngle;
+        // 散布 / Scatter
+        const scatter = (1 - radius / 15) * 0.5 + 0.1;
+        positions[i * 3] = Math.cos(spiralAngle) * radius + (Math.random() - 0.5) * scatter * 3;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * scatter * 1.5;
+        positions[i * 3 + 2] = Math.sin(spiralAngle) * radius + (Math.random() - 0.5) * scatter * 3;
+
+        // 颜色：内蓝外红 / Inner blue, outer red
+        const t = radius / 15;
+        const color = new THREE.Color();
+        if (t < 0.3) {
+            color.setHSL(0.6, 0.8, 0.7); // 蓝白色中心 / Blue-white center
+        } else if (t < 0.6) {
+            color.setHSL(0.7, 0.7, 0.5); // 紫色 / Purple
+        } else {
+            color.setHSL(0.0, 0.8, 0.4); // 红色边缘 / Red outer
+        }
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    material = new THREE.PointsMaterial({
+        size: particleSize * 0.012,
+        vertexColors: true,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending
+    });
+
+    points = new THREE.Points(geometry, material);
+    scene.add(points);
+}
+
+// 4. 萤火虫 - 随机游走 + 发光 / Firefly - Random wandering + glow
+function createFirefly() {
+    geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    velocities = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+        // 随机初始位置 / Random initial position
+        positions[i * 3] = (Math.random() - 0.5) * 20;
+        positions[i * 3 + 1] = Math.random() * 10;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+
+        // 随机游走速度 / Random walk velocity
+        velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.3;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+
+        // 绿-黄色 / Green-yellow
+        const hue = 0.15 + Math.random() * 0.15; // 黄绿 / Yellow-green
+        const color = new THREE.Color().setHSL(hue, 1.0, 0.5 + Math.random() * 0.3);
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    material = new THREE.PointsMaterial({
+        size: particleSize * 0.02,
+        vertexColors: true,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+    });
+
+    points = new THREE.Points(geometry, material);
+    scene.add(points);
+}
+
+// ============ 创建粒子 / Initialize Particles ============
+createStarfield();
+
+// ============ 模式切换 / Mode Switching ============
+function switchMode(mode) {
+    removeCurrentParticles();
+    currentMode = mode;
+    velocities = null;
+
+    switch (mode) {
+        case 'starfield': createStarfield(); break;
+        case 'fountain': createFountain(); break;
+        case 'galaxy': createGalaxy(); break;
+        case 'firefly': createFirefly(); break;
+    }
+}
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        switchMode(btn.dataset.mode);
+    });
+});
+
+// ============ UI 滑块 / UI Sliders ============
+document.getElementById('count').addEventListener('input', (e) => {
+    particleCount = parseInt(e.target.value);
+    document.getElementById('vCount').textContent = particleCount;
+    switchMode(currentMode);
+});
+
+document.getElementById('size').addEventListener('input', (e) => {
+    particleSize = parseFloat(e.target.value);
+    document.getElementById('vSize').textContent = particleSize.toFixed(1);
+    if (material) {
+        const factor = currentMode === 'fountain' ? 0.015 : currentMode === 'firefly' ? 0.02 : 0.012;
+        material.size = particleSize * factor;
+    }
+});
+
+document.getElementById('speed').addEventListener('input', (e) => {
+    speedMultiplier = parseFloat(e.target.value);
+    document.getElementById('vSpeed').textContent = speedMultiplier.toFixed(1);
+});
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    const dt = clock.getDelta() || 0.016;
+
+    if (points) {
+        switch (currentMode) {
+            case 'starfield':
+                // 缓慢旋转星空 / Slowly rotate starfield
+                points.rotation.y += 0.0005 * speedMultiplier;
+                points.rotation.x += 0.0002 * speedMultiplier;
+                break;
+
+            case 'fountain': {
+                // 更新喷泉粒子 - 重力模拟
+                // Update fountain particles - gravity simulation
+                const pos = geometry.attributes.position.array;
+                const col = geometry.attributes.color.array;
+                const gravity = -9.8 * speedMultiplier;
+
+                for (let i = 0; i < particleCount; i++) {
+                    velocities[i * 3 + 1] += gravity * dt; // 重力 / Gravity
+                    pos[i * 3] += velocities[i * 3] * dt * speedMultiplier;
+                    pos[i * 3 + 1] += velocities[i * 3 + 1] * dt * speedMultiplier;
+                    pos[i * 3 + 2] += velocities[i * 3 + 2] * dt * speedMultiplier;
+
+                    // 重置落下的粒子 / Reset fallen particles
+                    if (pos[i * 3 + 1] < -1) {
+                        resetFountainParticle(i, pos, velocities, col, false);
+                    }
+                }
+                geometry.attributes.position.needsUpdate = true;
+                break;
+            }
+
+            case 'galaxy':
+                // 缓慢旋转银河 / Slowly rotate galaxy
+                points.rotation.y += 0.001 * speedMultiplier;
+                break;
+
+            case 'firefly': {
+                // 萤火虫随机游走 / Firefly random walk
+                const pos = geometry.attributes.position.array;
+                const col = geometry.attributes.color.array;
+
+                for (let i = 0; i < particleCount; i++) {
+                    // 随机改变方向 / Randomly change direction
+                    velocities[i * 3] += (Math.random() - 0.5) * 0.1 * speedMultiplier;
+                    velocities[i * 3 + 1] += (Math.random() - 0.5) * 0.05 * speedMultiplier;
+                    velocities[i * 3 + 2] += (Math.random() - 0.5) * 0.1 * speedMultiplier;
+
+                    // 限制速度 / Clamp velocity
+                    velocities[i * 3] *= 0.98;
+                    velocities[i * 3 + 1] *= 0.98;
+                    velocities[i * 3 + 2] *= 0.98;
+
+                    pos[i * 3] += velocities[i * 3];
+                    pos[i * 3 + 1] += velocities[i * 3 + 1];
+                    pos[i * 3 + 2] += velocities[i * 3 + 2];
+
+                    // 边界反弹 / Boundary bounce
+                    if (Math.abs(pos[i * 3]) > 10) velocities[i * 3] *= -1;
+                    if (pos[i * 3 + 1] < 0 || pos[i * 3 + 1] > 10) velocities[i * 3 + 1] *= -1;
+                    if (Math.abs(pos[i * 3 + 2]) > 10) velocities[i * 3 + 2] *= -1;
+
+                    // 闪烁效果 / Twinkling effect
+                    const brightness = 0.5 + 0.5 * Math.sin(t * 3 + i * 0.1);
+                    col[i * 3] *= (0.99 + brightness * 0.01);
+                    col[i * 3 + 1] *= (0.99 + brightness * 0.01);
+                }
+                geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.color.needsUpdate = true;
+                break;
+            }
+        }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

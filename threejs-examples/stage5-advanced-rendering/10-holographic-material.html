@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全息材质 / Holographic Material</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #050510; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.85); color: #fff;
+            padding: 14px 18px; border-radius: 8px;
+            max-width: 380px; font-size: 13px; line-height: 1.5;
+            z-index: 10;
+        }
+        #info h2 { margin: 0 0 6px; font-size: 15px; color: #0ff; }
+        #info p { margin: 3px 0; }
+        .slider-group { margin: 6px 0; }
+        .slider-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 2px; }
+        .slider-group input[type=range] {
+            width: 100%; height: 4px; -webkit-appearance: none;
+            background: #333; border-radius: 2px; outline: none;
+        }
+        .slider-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: #0ff; border-radius: 50%; cursor: pointer;
+        }
+        .val { float: right; color: #0ff; font-family: monospace; }
+        #codeToggle {
+            margin-top: 8px; padding: 5px 12px;
+            border: 1px solid #0ff; background: transparent; color: #0ff;
+            border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+        }
+        #codeToggle:hover { background: #0ff; color: #000; }
+        #codePanel {
+            display: none;
+            background: rgba(0,0,0,0.6); padding: 8px; margin-top: 6px;
+            border-radius: 4px; font-family: 'Courier New', monospace; font-size: 10px;
+            color: #8ff; border-left: 3px solid #0ff; line-height: 1.3;
+            white-space: pre-wrap; max-height: 250px; overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+<div id="info">
+    <h2>全息材质 / Holographic Material</h2>
+    <p>自定义 ShaderMaterial 创建全息投影效果，包含菲涅尔边缘光、扫描线和视角色彩偏移。</p>
+    <p style="color:#888;">Custom ShaderMaterial for holographic effect with Fresnel, scanlines, and view-angle color shift.</p>
+    <div class="slider-group">
+        <label>菲涅尔强度 Fresnel <span class="val" id="vFresnel">1.50</span></label>
+        <input type="range" id="fresnel" min="0" max="3" step="0.01" value="1.5">
+    </div>
+    <div class="slider-group">
+        <label>扫描线密度 Scanlines <span class="val" id="vScanline">60.0</span></label>
+        <input type="range" id="scanline" min="10" max="150" step="1" value="60">
+    </div>
+    <div class="slider-group">
+        <label>扫描线速度 Scan Speed <span class="val" id="vScanSpeed">1.00</span></label>
+        <input type="range" id="scanSpeed" min="0" max="5" step="0.1" value="1.0">
+    </div>
+    <div class="slider-group">
+        <label>色彩偏移 Color Shift <span class="val" id="vColorShift">1.00</span></label>
+        <input type="range" id="colorShift" min="0" max="3" step="0.01" value="1.0">
+    </div>
+    <button id="codeToggle">显示/隐藏代码 Show/Hide Code</button>
+    <div id="codePanel"></div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ 场景设置 / Scene Setup ============
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050510);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(3, 2, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true; // 自动旋转展示效果 / Auto-rotate to show effect
+controls.autoRotateSpeed = 1.5;
+
+// ============ 灯光 / Lighting ============
+scene.add(new THREE.AmbientLight(0x112244, 0.3));
+const pointLight = new THREE.PointLight(0x00ffff, 2, 20);
+pointLight.position.set(3, 3, 3);
+scene.add(pointLight);
+
+// ============ 全息着色器 / Holographic Shader ============
+const holoVertexShader = /* glsl */`
+    uniform float uTime;
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vViewDir;
+    varying vec2 vUv;
+
+    void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        // 视角方向 - 用于菲涅尔计算
+        // View direction - for Fresnel calculation
+        vViewDir = normalize(cameraPosition - worldPos.xyz);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+`;
+
+const holoFragmentShader = /* glsl */`
+    uniform float uTime;
+    uniform float uFresnelPower;
+    uniform float uScanlineDensity;
+    uniform float uScanSpeed;
+    uniform float uColorShift;
+    uniform vec3 uBaseColor;
+
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vViewDir;
+    varying vec2 vUv;
+
+    void main() {
+        // === 1. 菲涅尔边缘光 / Fresnel Rim Lighting ===
+        // 当视线与法线夹角越大（越靠近边缘），值越强
+        // The more oblique the view angle, the stronger the effect
+        float fresnel = pow(1.0 - max(dot(vViewDir, vNormal), 0.0), uFresnelPower);
+
+        // === 2. 扫描线 / Scanlines ===
+        // 基于世界坐标Y轴创建水平扫描线
+        // Horizontal scanlines based on world Y coordinate
+        float scanline = sin(vWorldPosition.y * uScanlineDensity + uTime * uScanSpeed * 3.0);
+        scanline = smoothstep(0.3, 0.5, scanline) * 0.3;
+
+        // === 3. 视角色彩偏移 / View-Angle Color Shifting ===
+        // 根据视角改变颜色，模拟全息彩虹效果
+        // Shift color based on view angle for holographic rainbow
+        float viewAngle = dot(vViewDir, vNormal);
+        vec3 color1 = uBaseColor; // 主色 / Primary color
+        vec3 color2 = vec3(0.1, 1.0, 0.5); // 偏移色 / Shift color
+        vec3 color3 = vec3(0.8, 0.2, 1.0); // 第三色 / Tertiary color
+        float shift = viewAngle * uColorShift + uTime * 0.1;
+        vec3 holoColor = mix(color1, color2, sin(shift * 3.14159) * 0.5 + 0.5);
+        holoColor = mix(holoColor, color3, sin(shift * 6.28318 + 1.0) * 0.3 + 0.3);
+
+        // === 4. 闪烁效果 / Flicker Effect ===
+        float flicker = 0.95 + 0.05 * sin(uTime * 15.0 + vWorldPosition.y * 5.0);
+
+        // === 5. 组合最终颜色 / Combine Final Color ===
+        float alpha = fresnel * 0.8 + 0.15 + scanline;
+        vec3 finalColor = holoColor * (fresnel * 1.5 + 0.3) * flicker;
+        finalColor += vec3(0.0, 0.8, 1.0) * scanline; // 扫描线叠加色 / Scanline overlay
+
+        // 添加轻微噪声模拟全息失真 / Add slight noise for holographic distortion
+        float noise = fract(sin(dot(vUv + uTime * 0.01, vec2(12.9898, 78.233))) * 43758.5453);
+        finalColor += vec3(noise * 0.02);
+
+        gl_FragColor = vec4(finalColor, alpha * 0.85);
+    }
+`;
+
+// ============ 全息材质 / Holographic Material ============
+const holoUniforms = {
+    uTime: { value: 0.0 },
+    uFresnelPower: { value: 1.5 },
+    uScanlineDensity: { value: 60.0 },
+    uScanSpeed: { value: 1.0 },
+    uColorShift: { value: 1.0 },
+    uBaseColor: { value: new THREE.Color(0x00aaff) }
+};
+
+const holoMaterial = new THREE.ShaderMaterial({
+    vertexShader: holoVertexShader,
+    fragmentShader: holoFragmentShader,
+    uniforms: holoUniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+});
+
+// ============ 创建全息物体 / Create Holographic Objects ============
+// 主物体 - 纽结 / Main object - Torus Knot
+const torusKnot = new THREE.Mesh(
+    new THREE.TorusKnotGeometry(1.2, 0.4, 128, 32),
+    holoMaterial
+);
+torusKnot.position.y = 1.5;
+scene.add(torusKnot);
+
+// 底部平台 - 发光圆环 / Base platform - glowing ring
+const ringGeo = new THREE.TorusGeometry(1.8, 0.03, 16, 64);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4 });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = Math.PI / 2;
+scene.add(ring);
+
+// 粒子环绕 / Orbiting particles
+const particleCount = 500;
+const particleGeo = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+const pColors = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 1.5 + Math.random() * 1.5;
+    const height = Math.random() * 3;
+    positions[i * 3] = Math.cos(angle) * radius;
+    positions[i * 3 + 1] = height;
+    positions[i * 3 + 2] = Math.sin(angle) * radius;
+    pColors[i * 3] = 0.0;
+    pColors[i * 3 + 1] = 0.8 + Math.random() * 0.2;
+    pColors[i * 3 + 2] = 1.0;
+}
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+particleGeo.setAttribute('color', new THREE.BufferAttribute(pColors, 3));
+const particleMat = new THREE.PointsMaterial({
+    size: 0.03, vertexColors: true, transparent: true,
+    opacity: 0.6, blending: THREE.AdditiveBlending
+});
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// 地板网格 / Floor grid
+const gridHelper = new THREE.GridHelper(10, 20, 0x003344, 0x001122);
+scene.add(gridHelper);
+
+// ============ 代码显示 / Code Display ============
+document.getElementById('codeToggle').addEventListener('click', () => {
+    const panel = document.getElementById('codePanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        panel.textContent = holoFragmentShader.trim().substring(0, 800) + '\n...';
+    } else {
+        panel.style.display = 'none';
+    }
+});
+
+// ============ UI 滑块 / UI Sliders ============
+document.getElementById('fresnel').addEventListener('input', (e) => {
+    holoUniforms.uFresnelPower.value = parseFloat(e.target.value);
+    document.getElementById('vFresnel').textContent = parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('scanline').addEventListener('input', (e) => {
+    holoUniforms.uScanlineDensity.value = parseFloat(e.target.value);
+    document.getElementById('vScanline').textContent = parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('scanSpeed').addEventListener('input', (e) => {
+    holoUniforms.uScanSpeed.value = parseFloat(e.target.value);
+    document.getElementById('vScanSpeed').textContent = parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('colorShift').addEventListener('input', (e) => {
+    holoUniforms.uColorShift.value = parseFloat(e.target.value);
+    document.getElementById('vColorShift').textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+// ============ 窗口自适应 / Resize Handler ============
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+// ============ 动画循环 / Animation Loop ============
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    holoUniforms.uTime.value = t;
+
+    // 旋转物体 / Rotate objects
+    torusKnot.rotation.y = t * 0.3;
+    torusKnot.rotation.x = Math.sin(t * 0.5) * 0.1;
+    particles.rotation.y = t * 0.15;
+
+    // 底部光环脉动 / Base ring pulsing
+    ring.scale.set(
+        1 + Math.sin(t * 2) * 0.05,
+        1 + Math.sin(t * 2) * 0.05,
+        1
+    );
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

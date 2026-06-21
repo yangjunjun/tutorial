@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Spring Boot 父工程
+        统一管理依赖版本和插件配置
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <!-- ============================================ -->
+    <!-- 项目坐标（GAV）                              -->
+    <!-- ============================================ -->
+    <groupId>com.example</groupId>
+    <artifactId>blog-api</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>blog-api</name>
+    <description>Personal Blog System API - Spring Boot 3 Tutorial</description>
+
+    <!-- ============================================ -->
+    <!-- 项目属性                                      -->
+    <!-- ============================================ -->
+    <properties>
+        <java.version>17</java.version>
+        <!-- MyBatis-Plus 版本号，统一管理，便于后续升级 -->
+        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+    </properties>
+
+    <!-- ============================================ -->
+    <!-- 依赖列表                                      -->
+    <!-- ============================================ -->
+    <dependencies>
+
+        <!--
+            Spring Web Starter
+            包含 Spring MVC、内嵌 Tomcat、Jackson 等
+            用于开发 RESTful API
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+            MyBatis-Plus Spring Boot 3 Starter
+            ==========================================
+            重要：Spring Boot 3 必须使用 mybatis-plus-spring-boot3-starter
+            而非 mybatis-plus-boot-starter（旧版，基于 javax.servlet）
+            ==========================================
+            包含：
+            - MyBatis 核心框架
+            - MyBatis-Plus 增强功能（BaseMapper、IService、条件构造器等）
+            - Spring Boot 自动配置（数据源、SqlSessionFactory 等）
+            - 与 Jakarta EE（jakarta.*）兼容
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
+        <!--
+            MySQL JDBC 驱动（MySQL Connector/J）
+            ==========================================
+            scope=runtime 表示仅在运行时使用，编译时不需要
+            Spring Boot 父 POM 已经管理了版本号，无需手动指定
+            ==========================================
+            注意：
+            - MySQL 8 使用 com.mysql:mysql-connector-j（新坐标）
+            - 旧坐标 mysql:mysql-connector-java 已废弃但仍可用
+        -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            Lombok
+            通过注解自动生成 getter/setter/构造器/日志等代码
+            减少样板代码，提高开发效率
+            optional=true 表示不传递给依赖本项目的其他模块
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Spring Boot Test Starter
+            包含 JUnit 5、Mockito、AssertJ、Spring Test 等
+            scope=test 表示仅在测试时使用
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================ -->
+    <!-- 构建配置                                      -->
+    <!-- ============================================ -->
+    <build>
+        <plugins>
+            <!--
+                Spring Boot Maven 插件
+                功能：
+                1. mvn spring-boot:run — 命令行启动应用
+                2. mvn package — 打包为可执行 Fat JAR
+                3. 排除 Lombok（运行时不需要）
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

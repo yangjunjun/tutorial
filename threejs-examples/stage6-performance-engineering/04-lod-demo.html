@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>04 - 细节层级 / Level of Detail (LOD)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #1a1a2e; }
+        canvas { display: block; }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            min-width: 300px;
+            z-index: 100;
+        }
+        #info-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #4fc3f7;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+        .metric-label { color: #aaa; }
+        .metric-value { color: #4fc3f7; font-weight: bold; }
+        .lod-high { color: #4caf50; }
+        .lod-medium { color: #ffeb3b; }
+        .lod-low { color: #ff9800; }
+        .lod-verylow { color: #f44336; }
+        .section-title {
+            color: #ff9800;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 12px;
+            border-top: 1px solid #444;
+            padding-top: 8px;
+        }
+        .btn-group { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 14px;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .btn-wireframe { background: #2196f3; color: #fff; }
+        .btn-wireframe.active { border-color: #fff; }
+        .btn-add { background: #4caf50; color: #fff; }
+        .btn-clear { background: #f44336; color: #fff; }
+        .hint {
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(255, 152, 0, 0.1);
+            border-left: 3px solid #ff9800;
+            font-size: 11px;
+            color: #ffcc80;
+        }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h2>细节层级 / Level of Detail</h2>
+        <div class="metric-row">
+            <span class="metric-label">Camera Distance:</span>
+            <span class="metric-value" id="camera-distance">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Current LOD Level:</span>
+            <span class="metric-value" id="lod-level">High</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">LOD Objects:</span>
+            <span class="metric-value" id="lod-count">1</span>
+        </div>
+
+        <div class="section-title">LOD Levels Detail / 层级详情</div>
+        <div class="metric-row">
+            <span class="metric-label">High (0-10):</span>
+            <span class="metric-value lod-high" id="tri-high">64 segments</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Medium (10-25):</span>
+            <span class="metric-value lod-medium" id="tri-medium">16 segments</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Low (25-50):</span>
+            <span class="metric-value lod-low" id="tri-low">8 segments</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Very Low (50+):</span>
+            <span class="metric-value lod-verylow" id="tri-verylow">4 segments</span>
+        </div>
+
+        <div class="metric-row" style="margin-top: 10px;">
+            <span class="metric-label">Total Triangles:</span>
+            <span class="metric-value" id="total-triangles">0</span>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-wireframe" id="btn-wireframe">Toggle Wireframe</button>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-add" id="btn-add">+ Add LOD Object</button>
+            <button class="btn btn-clear" id="btn-clear">Clear All</button>
+        </div>
+
+        <div class="hint">
+            滚轮缩放查看 LOD 切换效果<br>
+            Zoom in/out to see LOD switching
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================
+        // 场景初始化 / Scene Initialization
+        // ============================================
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        scene.fog = new THREE.FogExp2(0x1a1a2e, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(0, 8, 20);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // 轨道控制器 / Orbit controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 3;
+        controls.maxDistance = 100;
+
+        // ============================================
+        // 灯光 / Lighting
+        // ============================================
+
+        scene.add(new THREE.AmbientLight(0x404060, 0.5));
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        const pointLight1 = new THREE.PointLight(0xff6b6b, 0.6, 30);
+        pointLight1.position.set(-10, 5, -10);
+        scene.add(pointLight1);
+
+        const pointLight2 = new THREE.PointLight(0x4ecdc4, 0.6, 30);
+        pointLight2.position.set(10, 5, 10);
+        scene.add(pointLight2);
+
+        // 地面 / Ground
+        const groundGeom = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x2a2a4a, roughness: 0.9 });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const gridHelper = new THREE.GridHelper(100, 100, 0x444466, 0x333355);
+        scene.add(gridHelper);
+
+        // ============================================
+        // LOD 对象管理 / LOD Object Management
+        // ============================================
+
+        const lodObjects = []; // 存储所有 LOD 对象 / Store all LOD objects
+        let wireframeMode = false;
+
+        // LOD 级别配置 / LOD level configuration
+        // 距离: [最近距离, 最远距离] -> 几何体段数
+        // Distance: [min, max] -> geometry segments
+        const lodLevels = [
+            { distance: 0,  segments: 64, label: 'High (64 seg)',     color: 0x4caf50 },
+            { distance: 10, segments: 16, label: 'Medium (16 seg)',   color: 0xffeb3b },
+            { distance: 25, segments: 8,  label: 'Low (8 seg)',       color: 0xff9800 },
+            { distance: 50, segments: 4,  label: 'Very Low (4 seg)',  color: 0xf44336 }
+        ];
+
+        // 创建 LOD 对象 / Create LOD object
+        function createLODObject(position, color) {
+            const lod = new THREE.LOD();
+
+            // 为每个细节级别创建网格 / Create mesh for each detail level
+            lodLevels.forEach((level) => {
+                const geometry = new THREE.SphereGeometry(1.5, level.segments, level.segments);
+                const material = new THREE.MeshStandardMaterial({
+                    color: color || level.color,
+                    roughness: 0.3,
+                    metalness: 0.6,
+                    wireframe: wireframeMode,
+                    flatShading: level.segments <= 8 // 低多边形使用平面着色 / Flat shading for low-poly
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.userData.segments = level.segments;
+                mesh.userData.lodLabel = level.label;
+
+                // 添加到 LOD 对象 / Add to LOD object
+                // addLevel(mesh, distance): 当距离 >= distance 时使用此级别
+                lod.addLevel(mesh, level.distance);
+            });
+
+            lod.position.copy(position);
+            scene.add(lod);
+            lodObjects.push(lod);
+
+            updateInfoPanel();
+            return lod;
+        }
+
+        // 创建复杂装饰几何体 / Create decorative complex geometry
+        function createDecoratedLOD(position, baseColor) {
+            const lod = new THREE.LOD();
+
+            lodLevels.forEach((level) => {
+                const group = new THREE.Group();
+
+                // 主球体 / Main sphere
+                const sphereGeom = new THREE.SphereGeometry(1.5, level.segments, level.segments);
+                const sphereMat = new THREE.MeshStandardMaterial({
+                    color: baseColor,
+                    roughness: 0.3,
+                    metalness: 0.6,
+                    wireframe: wireframeMode,
+                    flatShading: level.segments <= 8
+                });
+                const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+                group.add(sphere);
+
+                // 高细节添加装饰环 / Add decorative ring for high detail
+                if (level.segments >= 16) {
+                    const ringGeom = new THREE.TorusGeometry(2.0, 0.1, 8, level.segments);
+                    const ringMat = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.2,
+                        metalness: 0.8,
+                        wireframe: wireframeMode
+                    });
+                    const ring = new THREE.Mesh(ringGeom, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    group.add(ring);
+                }
+
+                // 最高细节添加更多装饰 / Add more decorations for highest detail
+                if (level.segments >= 64) {
+                    for (let i = 0; i < 3; i++) {
+                        const ringGeom = new THREE.TorusGeometry(2.2, 0.05, 4, 32);
+                        const ringMat = new THREE.MeshStandardMaterial({
+                            color: 0xffd700,
+                            roughness: 0.1,
+                            metalness: 0.9,
+                            wireframe: wireframeMode
+                        });
+                        const ring = new THREE.Mesh(ringGeom, ringMat);
+                        ring.rotation.x = (i / 3) * Math.PI;
+                        ring.rotation.y = (i / 3) * Math.PI * 0.5;
+                        group.add(ring);
+                    }
+                }
+
+                group.userData.segments = level.segments;
+                group.userData.lodLabel = level.label;
+                lod.addLevel(group, level.distance);
+            });
+
+            lod.position.copy(position);
+            scene.add(lod);
+            lodObjects.push(lod);
+
+            updateInfoPanel();
+            return lod;
+        }
+
+        // 初始创建 LOD 对象 / Create initial LOD objects
+        createLODObject(new THREE.Vector3(0, 2, 0), 0x4fc3f7);
+        createDecoratedLOD(new THREE.Vector3(-6, 2, -3), 0xff6b6b);
+        createDecoratedLOD(new THREE.Vector3(6, 2, -3), 0x4ecdc4);
+        createLODObject(new THREE.Vector3(-3, 2, 5), 0xf7dc6f);
+        createLODObject(new THREE.Vector3(3, 2, 5), 0xbb8fce);
+
+        // ============================================
+        // 信息面板更新 / Info Panel Update
+        // ============================================
+
+        function updateInfoPanel() {
+            document.getElementById('lod-count').textContent = lodObjects.length;
+
+            // 计算相机到第一个 LOD 的距离 / Calculate distance to first LOD
+            if (lodObjects.length > 0) {
+                const distance = camera.position.distanceTo(lodObjects[0].position);
+                document.getElementById('camera-distance').textContent = distance.toFixed(1);
+
+                // 确定当前 LOD 级别 / Determine current LOD level
+                let currentLevel = lodLevels[lodLevels.length - 1].label;
+                let currentClass = 'lod-verylow';
+                for (let i = lodLevels.length - 1; i >= 0; i--) {
+                    if (distance >= lodLevels[i].distance) {
+                        currentLevel = lodLevels[i].label;
+                        currentClass = ['lod-high', 'lod-medium', 'lod-low', 'lod-verylow'][i];
+                        break;
+                    }
+                }
+                const levelEl = document.getElementById('lod-level');
+                levelEl.textContent = currentLevel;
+                levelEl.className = 'metric-value ' + currentClass;
+            }
+
+            // 更新三角形计数 / Update triangle count
+            document.getElementById('total-triangles').textContent =
+                renderer.info.render.triangles.toLocaleString();
+
+            // 计算各层级的三角形数 / Calculate triangles per level
+            lodLevels.forEach((level, i) => {
+                const triCount = 2 * level.segments * level.segments;
+                const elId = ['tri-high', 'tri-medium', 'tri-low', 'tri-verylow'][i];
+                document.getElementById(elId).textContent = `${level.segments} seg (~${triCount} tri)`;
+            });
+        }
+
+        // ============================================
+        // UI 事件 / UI Events
+        // ============================================
+
+        document.getElementById('btn-wireframe').addEventListener('click', (e) => {
+            wireframeMode = !wireframeMode;
+            e.target.classList.toggle('active', wireframeMode);
+
+            // 更新所有材质的线框模式 / Update wireframe mode for all materials
+            lodObjects.forEach(lod => {
+                lod.levels.forEach(level => {
+                    const obj = level.object;
+                    if (obj.isMesh && obj.material) {
+                        obj.material.wireframe = wireframeMode;
+                    }
+                    if (obj.isGroup) {
+                        obj.children.forEach(child => {
+                            if (child.material) child.material.wireframe = wireframeMode;
+                        });
+                    }
+                });
+            });
+        });
+
+        document.getElementById('btn-add').addEventListener('click', () => {
+            const pos = new THREE.Vector3(
+                (Math.random() - 0.5) * 30,
+                2,
+                (Math.random() - 0.5) * 30
+            );
+            const color = new THREE.Color().setHSL(Math.random(), 0.7, 0.5);
+            if (Math.random() > 0.5) {
+                createDecoratedLOD(pos, color.getHex());
+            } else {
+                createLODObject(pos, color.getHex());
+            }
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            lodObjects.forEach(lod => {
+                scene.remove(lod);
+                // 释放所有级别的几何体和材质 / Dispose geometry and material for all levels
+                lod.levels.forEach(level => {
+                    const obj = level.object;
+                    if (obj.isMesh) {
+                        obj.geometry.dispose();
+                        obj.material.dispose();
+                    }
+                    if (obj.isGroup) {
+                        obj.children.forEach(child => {
+                            if (child.geometry) child.geometry.dispose();
+                            if (child.material) child.material.dispose();
+                        });
+                    }
+                });
+            });
+            lodObjects.length = 0;
+            updateInfoPanel();
+        });
+
+        // ============================================
+        // 动画循环 / Animation Loop
+        // ============================================
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+
+            // 更新所有 LOD 对象 / Update all LOD objects
+            // LOD 会根据相机距离自动切换级别
+            // LOD automatically switches levels based on camera distance
+            lodObjects.forEach((lod, index) => {
+                lod.update(camera); // 更新 LOD 级别 / Update LOD level
+
+                // 轻微浮动动画 / Gentle floating animation
+                lod.position.y = 2 + Math.sin(elapsedTime + index) * 0.3;
+                lod.rotation.y = elapsedTime * 0.2 + index;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+
+            // 持续更新信息面板 / Continuously update info panel
+            updateInfoPanel();
+        }
+
+        // ============================================
+        // 响应式处理 / Responsive Handling
+        // ============================================
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 启动 / Start
+        animate();
+
+        console.log('%cLOD 提示 / LOD Tips:', 'color: #ff9800; font-weight: bold; font-size: 14px;');
+        console.log('1. LOD 根据相机距离自动切换细节级别 / LOD auto-switches detail levels based on camera distance');
+        console.log('2. 使用 lod.addLevel(mesh, distance) 添加级别 / Use lod.addLevel(mesh, distance) to add levels');
+        console.log('3. 每帧需要调用 lod.update(camera) / Call lod.update(camera) each frame');
+        console.log('4. 远距离物体使用低多边形节省性能 / Use low-poly for distant objects to save performance');
+
+    </script>
+</body>
+</html>

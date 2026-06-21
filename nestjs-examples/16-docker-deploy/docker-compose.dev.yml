@@ -1,0 +1,105 @@
+# =============================================================================
+# Docker Compose 开发环境覆盖配置
+# =============================================================================
+#
+# 【使用方式】
+# 此文件用于覆盖 docker-compose.yml 中的配置，添加开发所需的服务。
+# 启动命令：docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# 【开发环境额外服务】
+# - PostgreSQL 数据库（为后续持久化做准备）
+# - Redis 缓存服务（为后续缓存功能做准备）
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 覆盖 app-dev 服务配置
+  # ---------------------------------------------------------------------------
+  app-dev:
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - LOG_LEVEL=debug
+      # 数据库连接（开发环境使用简单的密码）
+      - DATABASE_URL=postgresql://nestjs:nestjs_dev_password@postgres:5432/nestjs_dev
+      # Redis 连接
+      - REDIS_URL=redis://redis:6379
+    # 依赖服务：确保数据库和 Redis 先启动
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 数据库服务
+  # ---------------------------------------------------------------------------
+  # 【PostgreSQL 在开发中的用途】
+  # - 替代内存存储，测试真实的数据库操作
+  # - 验证数据库迁移脚本
+  # - 使用 TypeORM/Prisma 等 ORM 时的数据持久化
+  postgres:
+    image: postgres:16-alpine
+    container_name: nestjs-postgres-dev
+    ports:
+      - "5432:5432"
+    environment:
+      # PostgreSQL 初始化配置
+      # 注意：这些仅在首次创建数据卷时生效
+      POSTGRES_USER: nestjs
+      POSTGRES_PASSWORD: nestjs_dev_password
+      POSTGRES_DB: nestjs_dev
+    volumes:
+      # 持久化数据卷：停止容器后数据不丢失
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # 使用 pg_isready 检查 PostgreSQL 是否就绪
+      test: ["CMD-SHELL", "pg_isready -U nestjs -d nestjs_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ---------------------------------------------------------------------------
+  # Redis 缓存服务
+  # ---------------------------------------------------------------------------
+  # 【Redis 在开发中的用途】
+  # - 接口响应缓存
+  # - 会话管理
+  # - 限流（Rate Limiting）
+  # - 消息队列（Bull）
+  redis:
+    image: redis:7-alpine
+    container_name: nestjs-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      # 持久化 Redis 数据
+      - redis_data:/data
+    healthcheck:
+      # 使用 redis-cli ping 检查 Redis 是否就绪
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Redis 配置：启用 AOF 持久化
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - app-network
+
+# 数据卷声明
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# 使用与主 compose 文件相同的网络
+networks:
+  app-network:
+    driver: bridge

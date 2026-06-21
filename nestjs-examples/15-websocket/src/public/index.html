@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NestJS WebSocket 聊天室</title>
+  <!-- 引入 Socket.io 客户端库（从 CDN 加载） -->
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    /* =============================================
+       全局样式
+       ============================================= */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* =============================================
+       顶部状态栏
+       ============================================= */
+    .header {
+      background: #1a73e8;
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { font-size: 18px; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    .status-dot.connected { background: #4caf50; }
+    .status-dot.disconnected { background: #f44336; }
+
+    /* =============================================
+       主体布局
+       ============================================= */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* =============================================
+       侧边栏（房间列表 + 在线用户）
+       ============================================= */
+    .sidebar {
+      width: 240px;
+      background: white;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .sidebar-section h3 {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .room-list { list-style: none; }
+    .room-list li {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    .room-list li:hover { background: #f0f2f5; }
+    .room-list li.active { background: #e3f2fd; color: #1a73e8; font-weight: 600; }
+    .online-users { list-style: none; }
+    .online-users li {
+      padding: 6px 0;
+      font-size: 13px;
+      color: #333;
+    }
+    .online-users li::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #4caf50;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    /* =============================================
+       聊天区域
+       ============================================= */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .message {
+      max-width: 70%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .message.sent {
+      align-self: flex-end;
+      background: #1a73e8;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .message.received {
+      align-self: flex-start;
+      background: white;
+      border-bottom-left-radius: 4px;
+    }
+    .message.system {
+      align-self: center;
+      background: transparent;
+      color: #999;
+      font-size: 12px;
+    }
+    .message .meta {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    .typing-indicator {
+      padding: 4px 16px;
+      font-size: 12px;
+      color: #999;
+      font-style: italic;
+      min-height: 20px;
+    }
+
+    /* =============================================
+       输入区域
+       ============================================= */
+    .input-area {
+      padding: 16px;
+      background: white;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 8px;
+    }
+    .input-area input {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid #ddd;
+      border-radius: 24px;
+      font-size: 14px;
+      outline: none;
+    }
+    .input-area input:focus { border-color: #1a73e8; }
+    .input-area button {
+      padding: 10px 24px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 24px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .input-area button:hover { background: #1557b0; }
+    .input-area button:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* =============================================
+       登录弹窗
+       ============================================= */
+    .login-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .login-box {
+      background: white;
+      padding: 32px;
+      border-radius: 12px;
+      width: 360px;
+    }
+    .login-box h2 { margin-bottom: 20px; color: #333; }
+    .login-box input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    .login-box input:focus { border-color: #1a73e8; }
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .login-box button:hover { background: #1557b0; }
+  </style>
+</head>
+<body>
+  <!-- 登录弹窗 -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>进入聊天室</h2>
+      <input type="text" id="usernameInput" placeholder="请输入你的用户名" maxlength="20">
+      <button onclick="joinChat()">进入</button>
+    </div>
+  </div>
+
+  <!-- 顶部状态栏 -->
+  <div class="header">
+    <h1>NestJS WebSocket 聊天室</h1>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">未连接</span>
+    </div>
+  </div>
+
+  <!-- 主体内容 -->
+  <div class="main">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>房间列表</h3>
+        <ul class="room-list" id="roomList">
+          <li class="active" onclick="switchRoom('general')">综合讨论</li>
+          <li onclick="switchRoom('tech')">技术交流</li>
+          <li onclick="switchRoom('random')">随便聊聊</li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h3>在线用户</h3>
+        <ul class="online-users" id="onlineUsers">
+          <!-- 动态填充 -->
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h3>事件演示</h3>
+        <p style="font-size:12px;color:#999;">服务器时间推送:</p>
+        <p style="font-size:13px;" id="serverTime">等待连接...</p>
+      </div>
+    </div>
+
+    <!-- 聊天区域 -->
+    <div class="chat-area">
+      <div class="messages" id="messages">
+        <!-- 消息动态填充 -->
+      </div>
+      <div class="typing-indicator" id="typingIndicator"></div>
+      <div class="input-area">
+        <input type="text" id="messageInput" placeholder="输入消息..." disabled
+               onkeypress="handleKeyPress(event)" oninput="handleTyping()">
+        <button id="sendBtn" onclick="sendMessage()" disabled>发送</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =============================================
+    // 全局变量
+    // =============================================
+    let socket = null;         // Socket.io 客户端实例
+    let eventsSocket = null;   // 事件网关客户端
+    let currentUser = '';      // 当前用户名
+    let currentRoom = 'general'; // 当前房间
+    let typingTimeout = null;  // 输入防抖定时器
+
+    // =============================================
+    // 连接函数
+    // =============================================
+
+    /**
+     * 加入聊天
+     * 建立与聊天网关的 WebSocket 连接
+     */
+    function joinChat() {
+      const username = document.getElementById('usernameInput').value.trim();
+      if (!username) {
+        alert('请输入用户名');
+        return;
+      }
+      currentUser = username;
+
+      // 隐藏登录弹窗
+      document.getElementById('loginOverlay').style.display = 'none';
+
+      /**
+       * 创建 Socket.io 客户端连接
+       *
+       * io('http://localhost:3000/chat')
+       * - 连接到 /chat 命名空间
+       * - Socket.io 自动处理重连
+       */
+      socket = io('http://localhost:3000/chat', {
+        transports: ['websocket', 'polling'], // 传输方式
+      });
+
+      // 连接事件网关（用于接收服务器时间推送）
+      eventsSocket = io('http://localhost:3000/events', {
+        transports: ['websocket', 'polling'],
+      });
+
+      setupSocketListeners();
+      setupEventsListeners();
+    }
+
+    /**
+     * 设置聊天 Socket 事件监听器
+     */
+    function setupSocketListeners() {
+      // 连接成功
+      socket.on('connect', () => {
+        updateStatus(true);
+        // 自动加入默认房间
+        socket.emit('join_room', { room: currentRoom, user: currentUser });
+      });
+
+      // 断开连接
+      socket.on('disconnect', () => {
+        updateStatus(false);
+      });
+
+      // 收到消息
+      socket.on('message', (data) => {
+        appendMessage(data);
+        scrollToBottom();
+      });
+
+      // 用户加入通知
+      socket.on('user_joined', (data) => {
+        appendSystemMessage(data.message);
+        updateOnlineUsers(data.onlineUsers);
+      });
+
+      // 用户离开通知
+      socket.on('user_left', (data) => {
+        appendSystemMessage(data.message);
+        updateOnlineUsers(data.onlineUsers);
+      });
+
+      // 房间历史消息
+      socket.on('room_history', (messages) => {
+        document.getElementById('messages').innerHTML = '';
+        messages.forEach(msg => appendMessage(msg));
+        scrollToBottom();
+      });
+
+      // 正在输入指示器
+      socket.on('typing', (data) => {
+        const indicator = document.getElementById('typingIndicator');
+        if (data.isTyping) {
+          indicator.textContent = `${data.user} 正在输入...`;
+        } else {
+          indicator.textContent = '';
+        }
+        // 3秒后自动清除
+        setTimeout(() => { indicator.textContent = ''; }, 3000);
+      });
+    }
+
+    /**
+     * 设置事件网关监听器
+     */
+    function setupEventsListeners() {
+      // 欢迎消息
+      eventsSocket.on('welcome', (data) => {
+        console.log('欢迎:', data.message);
+      });
+
+      // 服务器时间推送（每5秒）
+      eventsSocket.on('server_time', (data) => {
+        const time = new Date(data.time).toLocaleTimeString('zh-CN');
+        document.getElementById('serverTime').textContent = time;
+      });
+
+      // 连接数变化
+      eventsSocket.on('connection_count', (data) => {
+        console.log(`事件网关连接数: ${data.count}`);
+      });
+    }
+
+    // =============================================
+    // 消息操作
+    // =============================================
+
+    /**
+     * 发送消息
+     */
+    function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const content = input.value.trim();
+      if (!content || !socket) return;
+
+      // 发送消息到服务端
+      socket.emit('message', {
+        room: currentRoom,
+        user: currentUser,
+        content: content,
+        type: 'text',
+      });
+
+      // 停止输入指示器
+      socket.emit('typing', {
+        room: currentRoom,
+        user: currentUser,
+        isTyping: false,
+      });
+
+      // 清空输入框
+      input.value = '';
+      input.focus();
+    }
+
+    /**
+     * 处理键盘事件（Enter 发送）
+     */
+    function handleKeyPress(event) {
+      if (event.key === 'Enter') {
+        sendMessage();
+      }
+    }
+
+    /**
+     * 处理输入事件（发送正在输入指示器）
+     */
+    function handleTyping() {
+      if (!socket) return;
+
+      // 发送正在输入状态
+      socket.emit('typing', {
+        room: currentRoom,
+        user: currentUser,
+        isTyping: true,
+      });
+
+      // 防抖：1.5秒后自动停止输入状态
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        socket.emit('typing', {
+          room: currentRoom,
+          user: currentUser,
+          isTyping: false,
+        });
+      }, 1500);
+    }
+
+    /**
+     * 追加消息到聊天区域
+     */
+    function appendMessage(data) {
+      const container = document.getElementById('messages');
+      const div = document.createElement('div');
+
+      if (data.type === 'system') {
+        div.className = 'message system';
+        div.textContent = data.content;
+      } else if (data.user === currentUser) {
+        div.className = 'message sent';
+        div.innerHTML = `<div class="meta">${data.user} - ${formatTime(data.timestamp)}</div>${escapeHtml(data.content)}`;
+      } else {
+        div.className = 'message received';
+        div.innerHTML = `<div class="meta">${data.user} - ${formatTime(data.timestamp)}</div>${escapeHtml(data.content)}`;
+      }
+
+      container.appendChild(div);
+    }
+
+    /**
+     * 追加系统消息
+     */
+    function appendSystemMessage(text) {
+      appendMessage({ type: 'system', content: text });
+      scrollToBottom();
+    }
+
+    // =============================================
+    // 房间操作
+    // =============================================
+
+    /**
+     * 切换房间
+     */
+    function switchRoom(room) {
+      if (room === currentRoom || !socket) return;
+
+      // 离开当前房间
+      socket.emit('leave_room', { room: currentRoom, user: currentUser });
+
+      // 更新 UI
+      document.querySelectorAll('.room-list li').forEach(li => li.classList.remove('active'));
+      event.target.classList.add('active');
+
+      // 加入新房间
+      currentRoom = room;
+      socket.emit('join_room', { room: currentRoom, user: currentUser });
+
+      // 清空消息区域
+      document.getElementById('messages').innerHTML = '';
+    }
+
+    // =============================================
+    // 辅助函数
+    // =============================================
+
+    function updateStatus(connected) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const input = document.getElementById('messageInput');
+      const btn = document.getElementById('sendBtn');
+
+      dot.className = `status-dot ${connected ? 'connected' : 'disconnected'}`;
+      text.textContent = connected ? `已连接 (${currentUser})` : '已断开';
+      input.disabled = !connected;
+      btn.disabled = !connected;
+    }
+
+    function updateOnlineUsers(users) {
+      const list = document.getElementById('onlineUsers');
+      list.innerHTML = users.map(u => `<li>${escapeHtml(u)}</li>`).join('');
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('messages');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function formatTime(timestamp) {
+      if (!timestamp) return '';
+      return new Date(timestamp).toLocaleTimeString('zh-CN', {
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 回车登录
+    document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') joinChat();
+    });
+  </script>
+</body>
+</html>

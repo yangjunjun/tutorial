@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scroll-Driven Experience / 滚动驱动沉浸式网页</title>
+<style>
+  /* ============ 全局重置 / Global Reset ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body {
+    background: #050510;
+    color: #e8e8f0;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* ============ Three.js固定画布 / Fixed Canvas ============ */
+  #bg-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+  }
+
+  /* ============ 可滚动内容层 / Scrollable Content Layer ============ */
+  #scroll-container {
+    position: relative;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #scroll-container * { pointer-events: auto; }
+
+  /* ============ 通用段落样式 / Common Section Styles ============ */
+  .section {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 80px 40px;
+    position: relative;
+  }
+
+  /* ============ 第1段: 英雄区 / Section 1: Hero ============ */
+  .hero-title {
+    font-size: clamp(48px, 12vw, 160px);
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    line-height: 1;
+    text-align: center;
+    background: linear-gradient(135deg, #ffffff 0%, #6c8cff 50%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0;
+    animation: fadeUp 1.2s ease 0.5s forwards;
+  }
+  .hero-sub {
+    font-size: clamp(14px, 2vw, 22px);
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-top: 20px;
+    opacity: 0;
+    animation: fadeUp 1.2s ease 0.9s forwards;
+  }
+  .scroll-hint {
+    position: absolute; bottom: 40px;
+    font-size: 12px; color: rgba(255,255,255,0.25);
+    letter-spacing: 3px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ============ 第2段: 特性 / Section 2: Features ============ */
+  .features-section {
+    min-height: 300vh;
+    justify-content: flex-start;
+    padding-top: 120px;
+  }
+  .feature-card {
+    max-width: 420px;
+    padding: 32px 36px;
+    border-radius: 20px;
+    background: rgba(10,10,30,0.6);
+    border: 1px solid rgba(108,140,255,0.1);
+    backdrop-filter: blur(12px);
+    margin-bottom: 60vh;
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.8s, transform 0.8s;
+  }
+  .feature-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .feature-card.left { align-self: flex-start; margin-left: 8%; }
+  .feature-card.right { align-self: flex-end; margin-right: 8%; }
+  .feature-card h2 {
+    font-size: 28px; font-weight: 700; margin-bottom: 8px;
+    background: linear-gradient(90deg, #6c8cff, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .feature-card .feat-num {
+    font-size: 60px; font-weight: 900; color: rgba(108,140,255,0.08);
+    position: absolute; top: -20px; left: 20px; line-height: 1;
+  }
+  .feature-card p { font-size: 15px; line-height: 1.8; color: rgba(255,255,255,0.55); }
+  .feature-card { position: relative; }
+
+  /* ============ 第3段: 展示 / Section 3: Showcase ============ */
+  .showcase-section {
+    min-height: 200vh;
+    justify-content: flex-start;
+    padding-top: 100px;
+  }
+  .showcase-title {
+    font-size: clamp(32px, 6vw, 64px);
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.08em;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #ff6ec7, #7b61ff, #00c8ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .showcase-desc {
+    max-width: 500px; text-align: center;
+    font-size: 16px; line-height: 1.8; color: rgba(255,255,255,0.45);
+    margin-bottom: 80vh;
+  }
+  .spec-row {
+    display: flex; gap: 40px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 60vh;
+  }
+  .spec-item {
+    padding: 24px 32px; border-radius: 16px;
+    background: rgba(10,10,30,0.5);
+    border: 1px solid rgba(123,97,255,0.1);
+    backdrop-filter: blur(8px);
+    text-align: center;
+    opacity: 0; transform: translateX(-30px);
+    transition: opacity 0.8s, transform 0.8s;
+  }
+  .spec-item.visible { opacity: 1; transform: translateX(0); }
+  .spec-item:nth-child(even) { transform: translateX(30px); }
+  .spec-item:nth-child(even).visible { transform: translateX(0); }
+  .spec-val {
+    font-size: 36px; font-weight: 800;
+    background: linear-gradient(135deg, #00c8ff, #7b61ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .spec-lbl { font-size: 12px; color: #667; letter-spacing: 2px; margin-top: 4px; text-transform: uppercase; }
+
+  /* ============ 第4段: 结尾CTA / Section 4: CTA ============ */
+  .cta-section {
+    min-height: 100vh;
+  }
+  .cta-title {
+    font-size: clamp(36px, 8vw, 80px);
+    font-weight: 900;
+    text-align: center;
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+    color: #fff;
+    opacity: 0;
+    transition: opacity 1s;
+  }
+  .cta-title.visible { opacity: 1; }
+  .cta-sub {
+    font-size: 18px; color: rgba(255,255,255,0.35);
+    letter-spacing: 0.2em; margin-bottom: 40px;
+    opacity: 0; transition: opacity 1s 0.3s;
+  }
+  .cta-sub.visible { opacity: 1; }
+  .cta-btn {
+    padding: 16px 48px; border-radius: 50px;
+    background: linear-gradient(135deg, #6c8cff, #a78bfa);
+    color: #fff; font-size: 16px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+    border: none; cursor: pointer;
+    transition: transform 0.3s, box-shadow 0.3s;
+    opacity: 0; transition: opacity 0.8s 0.6s, transform 0.3s, box-shadow 0.3s;
+  }
+  .cta-btn.visible { opacity: 1; }
+  .cta-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 40px rgba(108,140,255,0.4);
+  }
+
+  /* ============ 进度指示器 / Progress Indicator ============ */
+  #progress-bar {
+    position: fixed; top: 0; left: 0;
+    height: 3px; width: 0%;
+    background: linear-gradient(90deg, #6c8cff, #a78bfa, #ff6ec7);
+    z-index: 200;
+    transition: width 0.1s;
+  }
+  #progress-dots {
+    position: fixed; right: 24px; top: 50%;
+    transform: translateY(-50%);
+    z-index: 200;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .pdot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: background 0.3s, transform 0.3s;
+    cursor: pointer;
+  }
+  .pdot.active {
+    background: #6c8cff;
+    transform: scale(1.3);
+  }
+
+  /* ============ 加载画面 / Loading ============ */
+  #loader {
+    position: fixed; inset: 0; z-index: 999;
+    display: flex; align-items: center; justify-content: center;
+    background: #050510; transition: opacity 1s;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .loader-ring {
+    width: 48px; height: 48px;
+    border: 3px solid rgba(108,140,255,0.15);
+    border-top-color: #6c8cff;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ============ 响应式 / Responsive ============ */
+  @media (max-width: 768px) {
+    .section { padding: 60px 20px; }
+    .feature-card { margin-left: 4% !important; margin-right: 4% !important; max-width: none; }
+    .feature-card.left, .feature-card.right { align-self: center; }
+    .spec-row { gap: 16px; }
+    #progress-dots { right: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 加载画面 / Loading -->
+<div id="loader"><div class="loader-ring"></div></div>
+
+<!-- 进度条 / Progress Bar -->
+<div id="progress-bar"></div>
+<div id="progress-dots">
+  <div class="pdot active" data-section="0"></div>
+  <div class="pdot" data-section="1"></div>
+  <div class="pdot" data-section="2"></div>
+  <div class="pdot" data-section="3"></div>
+</div>
+
+<!-- 固定3D画布 / Fixed 3D Canvas -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- 可滚动内容 / Scrollable Content -->
+<div id="scroll-container">
+
+  <!-- Section 1: Hero / 英雄区 -->
+  <div class="section hero-section" data-section="0">
+    <div class="hero-title">EXPLORE</div>
+    <div class="hero-sub">Immersive Scroll-Driven Experience / 沉浸式滚动驱动体验</div>
+    <div class="scroll-hint">SCROLL DOWN &darr;</div>
+  </div>
+
+  <!-- Section 2: Features / 特性展示 -->
+  <div class="section features-section" data-section="1">
+    <div class="feature-card left" id="feat1">
+      <div class="feat-num">01</div>
+      <h2>Dynamic Geometry / 动态几何</h2>
+      <p>Procedural shapes morph and evolve as you scroll through the experience. Each form is mathematically generated in real-time.<br/>
+      程序化生成的几何形状随滚动而变化，每个形态都是实时数学计算的产物。</p>
+    </div>
+    <div class="feature-card right" id="feat2">
+      <div class="feat-num">02</div>
+      <h2>Particle Systems / 粒子系统</h2>
+      <p>Thousands of particles respond to scroll velocity, creating fluid-like motion that guides your journey through the scene.<br/>
+      数千粒子响应滚动速度，创造流体般的运动引导你穿越场景。</p>
+    </div>
+    <div class="feature-card left" id="feat3">
+      <div class="feat-num">03</div>
+      <h2>Camera Choreography / 镜头编排</h2>
+      <p>The camera follows carefully crafted spline paths, revealing new perspectives and hidden details with each scroll increment.<br/>
+      相机沿精心设计的样条路径移动，每次滚动都展现新的视角和隐藏的细节。</p>
+    </div>
+  </div>
+
+  <!-- Section 3: Showcase / 产品展示 -->
+  <div class="section showcase-section" data-section="2">
+    <div class="showcase-title">THE ARTIFACT</div>
+    <div class="showcase-desc">
+      A convergence of light and form, shaped by your interaction. Scroll to transform.<br/>
+      光与形的交汇，由你的交互塑造。滚动以变换。
+    </div>
+    <div class="spec-row">
+      <div class="spec-item" id="spec1"><div class="spec-val">12K</div><div class="spec-lbl">Particles / 粒子</div></div>
+      <div class="spec-item" id="spec2"><div class="spec-val">60fps</div><div class="spec-lbl">Render / 渲染</div></div>
+      <div class="spec-item" id="spec3"><div class="spec-val">4</div><div class="spec-lbl">Sections / 段落</div></div>
+      <div class="spec-item" id="spec4"><div class="spec-val">&infin;</div><div class="spec-lbl">Possibilities / 可能</div></div>
+    </div>
+  </div>
+
+  <!-- Section 4: CTA / 行动号召 -->
+  <div class="section cta-section" data-section="3">
+    <div class="cta-title" id="cta-title">READY?</div>
+    <div class="cta-sub" id="cta-sub">Begin your journey into the third dimension / 开启你的三维之旅</div>
+    <button class="cta-btn" id="cta-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+      RESTART / 重新开始
+    </button>
+  </div>
+
+</div><!-- /scroll-container -->
+
+<!-- ============ 导入映射 / Import Map ============ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ================================================================
+// 全局变量 / Global Variables
+// ================================================================
+let scene, camera, renderer;
+let scrollProgress = 0;       // 当前滚动进度 0~1 / Current scroll progress
+let targetProgress = 0;       // 目标滚动进度 / Target scroll progress (for lerp)
+let particles, particlePositions;
+let heroShape, featureObjects = [], showcaseObject;
+let cameraPath;
+const clock = new THREE.Clock();
+const canvas = document.getElementById('bg-canvas');
+
+init();
+animate();
+setupScrollTracking();
+setupIntersectionObserver();
+
+// ================================================================
+// 初始化 / Initialization
+// ================================================================
+function init() {
+  // -- 场景 / Scene --
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x050510, 0.015);
+
+  // -- 相机 / Camera --
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 2, 12);
+
+  // -- 渲染器 / Renderer --
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+
+  // -- 灯光 / Lighting --
+  scene.add(new THREE.AmbientLight(0x222244, 0.5));
+  const keyLight = new THREE.DirectionalLight(0xfff8f0, 1.5);
+  keyLight.position.set(5, 10, 7);
+  scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0x6c8cff, 2, 30);
+  fillLight.position.set(-6, 5, -3);
+  scene.add(fillLight);
+  const rimLight = new THREE.PointLight(0xa78bfa, 1.5, 25);
+  rimLight.position.set(3, 3, -8);
+  scene.add(rimLight);
+
+  // -- 相机路径 / Camera path for scroll-driven movement --
+  cameraPath = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 2, 12),     // Hero: front view
+    new THREE.Vector3(-5, 4, 8),     // Features: side angle
+    new THREE.Vector3(3, 3, 6),      // Showcase: close orbit
+    new THREE.Vector3(0, 8, 18),     // CTA: zoomed out overview
+  ], false, 'catmullrom', 0.5);
+
+  // -- 构建场景 / Build Scene Elements --
+  buildParticleField();
+  buildHeroShape();
+  buildFeatureObjects();
+  buildShowcaseObject();
+  buildEnvironmentAccents();
+
+  // -- 窗口调整 / Resize --
+  window.addEventListener('resize', onResize);
+
+  // -- 隐藏加载 / Hide loader --
+  setTimeout(() => document.getElementById('loader').classList.add('hidden'), 800);
+
+  // -- 进度点导航 / Dot navigation --
+  document.querySelectorAll('.pdot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const idx = parseInt(dot.dataset.section);
+      const sections = document.querySelectorAll('.section');
+      if (sections[idx]) {
+        sections[idx].scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+}
+
+// ================================================================
+// 粒子场 / Particle Field
+// ================================================================
+function buildParticleField() {
+  const count = 3000;
+  const geo = new THREE.BufferGeometry();
+  particlePositions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+    particlePositions[i3]     = (Math.random() - 0.5) * 50;
+    particlePositions[i3 + 1] = (Math.random() - 0.5) * 30;
+    particlePositions[i3 + 2] = (Math.random() - 0.5) * 50;
+
+    const hue = 0.55 + Math.random() * 0.25;
+    const color = new THREE.Color().setHSL(hue, 0.6, 0.5 + Math.random() * 0.3);
+    colors[i3] = color.r;
+    colors[i3 + 1] = color.g;
+    colors[i3 + 2] = color.b;
+
+    sizes[i] = 0.5 + Math.random() * 2;
+  }
+
+  geo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+  const mat = new THREE.PointsMaterial({
+    size: 0.08,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.7,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  particles = new THREE.Points(geo, mat);
+  scene.add(particles);
+}
+
+// ================================================================
+// 英雄区3D造型 / Hero Section 3D Shape
+// ================================================================
+function buildHeroShape() {
+  // 中央多面体 / Central polyhedron
+  const geo = new THREE.IcosahedronGeometry(1.8, 1);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0x6c8cff,
+    metalness: 0.4,
+    roughness: 0.2,
+    clearcoat: 0.8,
+    wireframe: false,
+    transparent: true,
+    opacity: 0.85,
+  });
+  heroShape = new THREE.Mesh(geo, mat);
+  heroShape.position.set(0, 2, 0);
+  scene.add(heroShape);
+
+  // 外层线框 / Outer wireframe shell
+  const wireGeo = new THREE.IcosahedronGeometry(2.5, 1);
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0xa78bfa,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.15,
+  });
+  const wireShell = new THREE.Mesh(wireGeo, wireMat);
+  heroShape.add(wireShell);
+}
+
+// ================================================================
+// 特性物体 / Feature Objects (one per feature card)
+// ================================================================
+function buildFeatureObjects() {
+  const configs = [
+    { geo: new THREE.TorusKnotGeometry(0.8, 0.25, 100, 16), pos: [-4, 3, -5], color: 0x00c8ff },
+    { geo: new THREE.OctahedronGeometry(1.0, 0), pos: [5, 2, -8], color: 0x7b61ff },
+    { geo: new THREE.TorusGeometry(0.9, 0.35, 16, 48), pos: [-3, 4, -12], color: 0xff6ec7 },
+  ];
+
+  configs.forEach(cfg => {
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: cfg.color,
+      metalness: 0.5,
+      roughness: 0.25,
+      clearcoat: 0.6,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const mesh = new THREE.Mesh(cfg.geo, mat);
+    mesh.position.set(...cfg.pos);
+    mesh.userData.basePos = new THREE.Vector3(...cfg.pos);
+    scene.add(mesh);
+    featureObjects.push(mesh);
+  });
+}
+
+// ================================================================
+// 展示物体 / Showcase Object (central piece for Section 3)
+// ================================================================
+function buildShowcaseObject() {
+  const group = new THREE.Group();
+  group.position.set(0, 2, -18);
+
+  // 主体: 十二面体 / Main body: dodecahedron
+  const mainGeo = new THREE.DodecahedronGeometry(1.6, 0);
+  const mainMat = new THREE.MeshPhysicalMaterial({
+    color: 0x7b61ff,
+    metalness: 0.6,
+    roughness: 0.15,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const mainMesh = new THREE.Mesh(mainGeo, mainMat);
+  group.add(mainMesh);
+
+  // 轨道环 / Orbital rings
+  for (let i = 0; i < 3; i++) {
+    const ringGeo = new THREE.TorusGeometry(2.2 + i * 0.4, 0.02, 8, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color().setHSL(0.6 + i * 0.1, 0.7, 0.55),
+      transparent: true, opacity: 0.4,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2 + (i - 1) * 0.4;
+    ring.rotation.y = i * 0.6;
+    group.add(ring);
+  }
+
+  // 小球卫星 / Satellite spheres
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const satGeo = new THREE.SphereGeometry(0.12, 12, 12);
+    const satMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color().setHSL(0.55 + i * 0.06, 0.8, 0.6),
+    });
+    const sat = new THREE.Mesh(satGeo, satMat);
+    sat.position.set(Math.cos(angle) * 2.8, Math.sin(angle * 0.5) * 0.5, Math.sin(angle) * 2.8);
+    group.add(sat);
+  }
+
+  scene.add(group);
+  showcaseObject = group;
+}
+
+// ================================================================
+// 环境装饰 / Environment Accents
+// ================================================================
+function buildEnvironmentAccents() {
+  // 散布的小装饰几何体 / Scattered decorative geometry
+  const accentGeo = new THREE.TetrahedronGeometry(0.3, 0);
+  const accentMat = new THREE.MeshBasicMaterial({
+    color: 0x334488,
+    transparent: true,
+    opacity: 0.2,
+    wireframe: true,
+  });
+  for (let i = 0; i < 30; i++) {
+    const mesh = new THREE.Mesh(accentGeo, accentMat.clone());
+    mesh.position.set(
+      (Math.random() - 0.5) * 40,
+      (Math.random() - 0.5) * 20,
+      (Math.random() - 0.5) * 40 - 10
+    );
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.userData.rotSpeed = 0.2 + Math.random() * 0.5;
+    scene.add(mesh);
+  }
+}
+
+// ================================================================
+// 滚动追踪 / Scroll Tracking
+// ================================================================
+function setupScrollTracking() {
+  window.addEventListener('scroll', () => {
+    const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+    targetProgress = scrollHeight > 0 ? window.scrollY / scrollHeight : 0;
+  }, { passive: true });
+}
+
+// ================================================================
+// 交叉观察器 (段落可见性) / Intersection Observer for Section Visibility
+// ================================================================
+function setupIntersectionObserver() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.2 });
+
+  // 观察特性卡片 / Observe feature cards
+  document.querySelectorAll('.feature-card').forEach(el => observer.observe(el));
+  // 观察规格项 / Observe spec items
+  document.querySelectorAll('.spec-item').forEach(el => observer.observe(el));
+  // 观察CTA元素 / Observe CTA elements
+  ['cta-title', 'cta-sub', 'cta-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el);
+  });
+}
+
+// ================================================================
+// 窗口调整 / Resize Handler
+// ================================================================
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ================================================================
+// 动画循环 / Animation Loop
+// ================================================================
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  const dt = clock.getDelta();
+
+  // -- 平滑插值滚动进度 / Smooth lerp toward target scroll progress --
+  scrollProgress += (targetProgress - scrollProgress) * 0.06;
+
+  // -- 更新进度条 / Update progress bar --
+  document.getElementById('progress-bar').style.width = (scrollProgress * 100) + '%';
+
+  // -- 更新进度点 / Update progress dots --
+  const activeSection = Math.min(3, Math.floor(scrollProgress * 4));
+  document.querySelectorAll('.pdot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === activeSection);
+  });
+
+  // ============================================================
+  // 根据滚动进度更新相机 / Update Camera Based on Scroll Progress
+  // ============================================================
+  const camPos = cameraPath.getPointAt(Math.min(scrollProgress, 0.999));
+  camera.position.lerp(camPos, 0.08);
+
+  // 相机看向点也随进度变化 / Camera look-at target shifts with progress
+  const lookTarget = new THREE.Vector3(
+    Math.sin(scrollProgress * Math.PI * 2) * 2,
+    2 + Math.sin(scrollProgress * Math.PI) * 2,
+    -scrollProgress * 20
+  );
+  camera.lookAt(lookTarget);
+
+  // ============================================================
+  // Section 1: Hero动画 / Hero Animations
+  // ============================================================
+  if (heroShape) {
+    // 根据第一段滚动缩放 / Scale based on first section scroll
+    const heroProgress = Math.min(scrollProgress * 4, 1); // 0-1 within section 1
+    const scale = 1 + heroProgress * 2.5;
+    heroShape.scale.setScalar(scale);
+    heroShape.rotation.x = t * 0.3 + scrollProgress * 2;
+    heroShape.rotation.y = t * 0.4 + scrollProgress * 3;
+    // 淡出 / Fade out as we scroll past
+    heroShape.material.opacity = Math.max(0, 0.85 - heroProgress * 0.8);
+  }
+
+  // ============================================================
+  // Section 2: Feature物体动画 / Feature Object Animations
+  // ============================================================
+  featureObjects.forEach((obj, i) => {
+    const sectionStart = 0.2 + i * 0.08;
+    const localProgress = Math.max(0, Math.min(1, (scrollProgress - sectionStart) * 5));
+
+    // 旋转 / Rotation
+    obj.rotation.x = t * (0.3 + i * 0.15);
+    obj.rotation.y = t * (0.4 + i * 0.1);
+
+    // 浮现效果 / Reveal effect
+    const revealScale = 0.3 + localProgress * 0.7;
+    obj.scale.setScalar(revealScale);
+    obj.material.opacity = localProgress * 0.9;
+
+    // 轻微浮动 / Gentle float
+    obj.position.y = obj.userData.basePos.y + Math.sin(t * 0.8 + i * 2) * 0.3;
+  });
+
+  // ============================================================
+  // Section 3: Showcase物体动画 / Showcase Object Animations
+  // ============================================================
+  if (showcaseObject) {
+    const showcaseProgress = Math.max(0, Math.min(1, (scrollProgress - 0.5) * 4));
+
+    // 滚动驱动旋转 / Scroll-driven rotation
+    showcaseObject.rotation.y = scrollProgress * Math.PI * 6;
+    showcaseObject.rotation.x = Math.sin(scrollProgress * Math.PI * 2) * 0.3;
+
+    // 材质颜色随进度变化 / Material color changes with scroll progress
+    const mainMesh = showcaseObject.children[0];
+    if (mainMesh && mainMesh.material) {
+      const hue = 0.7 - showcaseProgress * 0.4; // Purple -> cyan
+      mainMesh.material.color.setHSL(hue, 0.7, 0.5);
+    }
+
+    // 轨道环旋转 / Orbital ring rotation
+    showcaseObject.children.forEach((child, i) => {
+      if (i > 0 && i <= 3) {
+        child.rotation.z = t * (0.3 + i * 0.15) + scrollProgress * Math.PI;
+      }
+      // 卫星脉动 / Satellite pulse
+      if (i > 3) {
+        const s = 1 + 0.3 * Math.sin(t * 3 + i);
+        child.scale.setScalar(s);
+      }
+    });
+  }
+
+  // ============================================================
+  // 粒子场更新 / Particle Field Update
+  // ============================================================
+  if (particles) {
+    const positions = particles.geometry.attributes.position.array;
+    const scrollVelocity = Math.abs(targetProgress - scrollProgress) * 50;
+
+    for (let i = 0; i < positions.length; i += 3) {
+      // 基础漂浮 / Base floating motion
+      positions[i + 1] += Math.sin(t * 0.5 + positions[i] * 0.1) * 0.003;
+
+      // 滚动时粒子扩散 / Particles spread on scroll velocity
+      positions[i]     += Math.sin(t + i) * 0.001 * (1 + scrollVelocity);
+      positions[i + 2] += Math.cos(t + i) * 0.001 * (1 + scrollVelocity);
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+    particles.rotation.y = t * 0.02 + scrollProgress * 0.5;
+
+    // Section 4时粒子汇聚 / Particles converge in section 4
+    const ctaProgress = Math.max(0, (scrollProgress - 0.75) * 4);
+    if (ctaProgress > 0) {
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i]     *= (1 - ctaProgress * 0.002);
+        positions[i + 1] *= (1 - ctaProgress * 0.002);
+        positions[i + 2] *= (1 - ctaProgress * 0.002);
+      }
+    }
+  }
+
+  // ============================================================
+  // Section 4: 最终场景 / Final Scene Effects
+  // ============================================================
+  // 环境光变化 / Ambient light shift for CTA section
+  const ctaProgress = Math.max(0, (scrollProgress - 0.75) * 4);
+  renderer.toneMappingExposure = 1.2 + ctaProgress * 0.5;
+
+  // -- 渲染 / Render --
+  renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

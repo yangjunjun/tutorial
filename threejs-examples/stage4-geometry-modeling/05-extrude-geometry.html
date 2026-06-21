@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>挤压几何体 / ExtrudeGeometry — Three.js Stage 4</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #1b1b2f; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 14px 18px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-width: 280px;
+      pointer-events: none; backdrop-filter: blur(6px);
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #ff6b6b; }
+    #controls {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.78); color: #fff;
+      padding: 16px 20px; border-radius: 10px;
+      font-size: 13px; min-width: 250px;
+      backdrop-filter: blur(6px);
+    }
+    #controls h3 { color: #ff6b6b; margin: 10px 0 4px; font-size: 14px; }
+    #controls h3:first-child { margin-top: 0; }
+    #controls label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+    #controls input[type=range] { width: 100px; accent-color: #ff6b6b; }
+    #controls .val { color: #ff6b6b; min-width: 36px; text-align: right; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+    .btn-group button {
+      flex: 1 1 45%; padding: 6px 8px;
+      border: 1px solid #ff6b6b; background: transparent; color: #ff6b6b;
+      border-radius: 6px; cursor: pointer; font-size: 12px; transition: background .2s;
+    }
+    .btn-group button:hover, .btn-group button.active { background: rgba(255,107,107,0.25); }
+    .chk { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .chk input { accent-color: #ff6b6b; }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <h2>挤压几何体 / ExtrudeGeometry</h2>
+  从2D Shape路径挤压生成3D形状<br/>
+  Extrude 2D Shape paths into 3D objects<br/>
+  选择预设形状，调整挤压参数<br/>
+  Select preset shapes and adjust extrusion params
+</div>
+
+<div id="controls">
+  <h3>预设形状 / Preset Shapes</h3>
+  <div class="btn-group">
+    <button id="btnStar" class="active">星形 Star</button>
+    <button id="btnHeart">心形 Heart</button>
+    <button id="btnArrow">箭头 Arrow</button>
+    <button id="btnRoundRect">圆角矩形 RR</button>
+  </div>
+
+  <h3>挤压参数 / Extrude Params</h3>
+  <label>depth <input type="range" id="eDepth" min="0.1" max="3" step="0.1" value="1"><span class="val" id="eDepthv">1.0</span></label>
+  <div class="chk"><input type="checkbox" id="eBevel" checked><span>bevelEnabled</span></div>
+  <label>bevelThick <input type="range" id="eBT" min="0" max="0.5" step="0.02" value="0.15"><span class="val" id="eBTv">0.15</span></label>
+  <label>bevelSize <input type="range" id="eBS" min="0" max="0.5" step="0.02" value="0.1"><span class="val" id="eBSv">0.10</span></label>
+  <label>bevelSeg <input type="range" id="eBSeg" min="1" max="10" step="1" value="3"><span class="val" id="eBSegv">3</span></label>
+  <label>curveSeg <input type="range" id="eCS" min="3" max="32" step="1" value="12"><span class="val" id="eCSv">12</span></label>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── 场景 / Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1b2f);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 2, 7);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const ctrl = new OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true;
+
+// ── 灯光 / Lights ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+dl.position.set(5, 8, 5);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8888ff, 0.4);
+dl2.position.set(-3, 2, -4);
+scene.add(dl2);
+
+// ── 形状定义函数 / Shape definition functions ──
+
+// 星形 / Star shape
+function createStarShape() {
+  const shape = new THREE.Shape();
+  const outerR = 1.5, innerR = 0.7, points = 5;
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return shape;
+}
+
+// 心形 / Heart shape
+function createHeartShape() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  // 使用贝塞尔曲线绘制心形 / Use bezier curves for heart
+  shape.bezierCurveTo(0, -0.3, -0.5, -1, -1.2, -0.4);
+  shape.bezierCurveTo(-1.8, 0.2, -1.2, 1.2, 0, 1.8);
+  shape.bezierCurveTo(1.2, 1.2, 1.8, 0.2, 1.2, -0.4);
+  shape.bezierCurveTo(0.5, -1, 0, -0.3, 0, 0);
+  return shape;
+}
+
+// 箭头 / Arrow shape
+function createArrowShape() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 1.5);     // 箭头顶 / Arrow tip
+  shape.lineTo(-1, 0.3);    // 左翼 / Left wing
+  shape.lineTo(-0.35, 0.3);
+  shape.lineTo(-0.35, -1.2);
+  shape.lineTo(0.35, -1.2);
+  shape.lineTo(0.35, 0.3);
+  shape.lineTo(1, 0.3);     // 右翼 / Right wing
+  shape.closePath();
+  return shape;
+}
+
+// 圆角矩形 / Rounded rectangle
+function createRoundRectShape() {
+  const shape = new THREE.Shape();
+  const w = 2, h = 1.4, r = 0.35;
+  shape.moveTo(-w/2 + r, -h/2);
+  shape.lineTo(w/2 - r, -h/2);
+  shape.quadraticCurveTo(w/2, -h/2, w/2, -h/2 + r);
+  shape.lineTo(w/2, h/2 - r);
+  shape.quadraticCurveTo(w/2, h/2, w/2 - r, h/2);
+  shape.lineTo(-w/2 + r, h/2);
+  shape.quadraticCurveTo(-w/2, h/2, -w/2, h/2 - r);
+  shape.lineTo(-w/2, -h/2 + r);
+  shape.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+  return shape;
+}
+
+const shapeFns = { star: createStarShape, heart: createHeartShape, arrow: createArrowShape, roundrect: createRoundRectShape };
+const colors = { star: 0xff6b6b, heart: 0xff4757, arrow: 0x1e90ff, roundrect: 0x2ed573 };
+let currentShape = 'star';
+
+const mat = new THREE.MeshStandardMaterial({ color: colors.star, metalness: 0.3, roughness: 0.4 });
+let mesh = null;
+
+// 重建挤压几何体 / Rebuild extrude geometry
+function buildExtrude() {
+  const depth = +document.getElementById('eDepth').value;
+  const bevel = document.getElementById('eBevel').checked;
+  const bt = +document.getElementById('eBT').value;
+  const bs = +document.getElementById('eBS').value;
+  const bseg = +document.getElementById('eBSeg').value;
+  const cseg = +document.getElementById('eCS').value;
+
+  if (mesh) { mesh.geometry.dispose(); scene.remove(mesh); }
+
+  const shape = shapeFns[currentShape]();
+  // ExtrudeGeometry 参数 / ExtrudeGeometry parameters
+  const settings = {
+    depth: depth,
+    bevelEnabled: bevel,
+    bevelThickness: bt,
+    bevelSize: bs,
+    bevelSegments: bseg,
+    curveSegments: cseg,
+  };
+  const geo = new THREE.ExtrudeGeometry(shape, settings);
+  geo.computeVertexNormals();
+  geo.center(); // 居中 / Center the geometry
+  mat.color.set(colors[currentShape]);
+  mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+}
+
+buildExtrude();
+
+// ── 地面 / Ground ──
+scene.add(new THREE.GridHelper(16, 16, 0x444466, 0x333355));
+
+// ── 形状按钮 / Shape buttons ──
+['Star','Heart','Arrow','RoundRect'].forEach(name => {
+  document.getElementById('btn' + name).addEventListener('click', (e) => {
+    currentShape = name.toLowerCase();
+    document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    buildExtrude();
+  });
+});
+
+// ── 滑块 / Sliders ──
+const slBinds = [
+  ['eDepth','eDepthv',1], ['eBT','eBTv',2], ['eBS','eBSv',2], ['eBSeg','eBSegv',0], ['eCS','eCSv',0],
+];
+slBinds.forEach(([id, vid, dec]) => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(vid).textContent = (+document.getElementById(id).value).toFixed(dec);
+    buildExtrude();
+  });
+});
+document.getElementById('eBevel').addEventListener('change', buildExtrude);
+
+// ── 响应式 / Responsive ──
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 动画 / Animate ──
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() * 0.001;
+  if (mesh) {
+    mesh.rotation.y = t * 0.4;
+    mesh.rotation.x = Math.sin(t * 0.3) * 0.15;
+  }
+  ctrl.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 - 物理材质 / MeshPhysicalMaterial</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.5; max-width: 320px;
+      pointer-events: auto; z-index: 10; max-height: 90vh; overflow-y: auto;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .ctrl-group { margin-top: 6px; }
+    .ctrl-group label { display: block; margin-bottom: 2px; font-size: 12px; color: #aaa; }
+    input[type="range"] { width: 100%; margin: 2px 0 4px; }
+    .val { color: #4fc3f7; }
+    .section { border-top: 1px solid #333; padding-top: 6px; margin-top: 8px; }
+    /* 球体标签 / Sphere labels */
+    .sphere-label {
+      position: absolute; color: #fff; font-size: 13px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 4px;
+      pointer-events: none; z-index: 5; white-space: nowrap;
+      transform: translate(-50%, -100%);
+    }
+  </style>
+</head>
+<body>
+  <!-- 球体标签 / Sphere labels (positioned by JS) -->
+  <div class="sphere-label" id="lbl-glass">玻璃 / Glass</div>
+  <div class="sphere-label" id="lbl-clearcoat">清漆 / Clearcoat</div>
+  <div class="sphere-label" id="lbl-sheen">光泽 / Sheen</div>
+
+  <div id="info">
+    <h2>物理材质 / MeshPhysicalMaterial</h2>
+    <p>MeshPhysicalMaterial 扩展了 PBR 材质，支持透射、清漆层、光泽等高级效果。<br>
+       MeshPhysicalMaterial extends PBR with transmission, clearcoat, sheen, and more.</p>
+
+    <div class="ctrl-group">
+      <label>选中的球体 / Selected Sphere:</label>
+      <div style="display:flex; gap:4px; margin-bottom:6px;">
+        <button class="preset" onclick="selectSphere(0)" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;cursor:pointer;font-size:11px;">玻璃/Glass</button>
+        <button class="preset" onclick="selectSphere(1)" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;cursor:pointer;font-size:11px;">清漆/Clearcoat</button>
+        <button class="preset" onclick="selectSphere(2)" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;cursor:pointer;font-size:11px;">光泽/Sheen</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="ctrl-group">
+        <label>粗糙度 / Roughness: <span class="val" id="roughVal">0.05</span></label>
+        <input type="range" id="roughSlider" min="0" max="1" step="0.01" value="0.05">
+      </div>
+      <div class="ctrl-group" id="transmission-group">
+        <label>透射 / Transmission: <span class="val" id="transVal">1.00</span></label>
+        <input type="range" id="transSlider" min="0" max="1" step="0.01" value="1">
+      </div>
+      <div class="ctrl-group">
+        <label>IOR (折射率): <span class="val" id="iorVal">1.50</span></label>
+        <input type="range" id="iorSlider" min="1" max="2.5" step="0.01" value="1.5">
+      </div>
+      <div class="ctrl-group">
+        <label>厚度 / Thickness: <span class="val" id="thickVal">0.50</span></label>
+        <input type="range" id="thickSlider" min="0" max="2" step="0.01" value="0.5">
+      </div>
+    </div>
+
+    <div class="section" id="clearcoat-section">
+      <div class="ctrl-group">
+        <label>清漆 / Clearcoat: <span class="val" id="ccVal">1.00</span></label>
+        <input type="range" id="ccSlider" min="0" max="1" step="0.01" value="1">
+      </div>
+      <div class="ctrl-group">
+        <label>清漆粗糙度 / Clearcoat Roughness: <span class="val" id="ccrVal">0.10</span></label>
+        <input type="range" id="ccrSlider" min="0" max="1" step="0.01" value="0.1">
+      </div>
+    </div>
+
+    <div class="section" id="sheen-section">
+      <div class="ctrl-group">
+        <label>光泽 / Sheen: <span class="val" id="sheenVal">1.00</span></label>
+        <input type="range" id="sheenSlider" min="0" max="1" step="0.01" value="1">
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础场景 / Basic scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 3, 7);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1, 0);
+
+    // ===== 环境贴图 / Environment map =====
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color(0x556688);
+    // 彩色光源用于反射 / Colored lights for reflections
+    const el1 = new THREE.PointLight(0xff6644, 15, 20); el1.position.set(5, 5, 0); envScene.add(el1);
+    const el2 = new THREE.PointLight(0x4466ff, 15, 20); el2.position.set(-5, 3, 3); envScene.add(el2);
+    const el3 = new THREE.PointLight(0x44ff66, 10, 20); el3.position.set(0, 4, -5); envScene.add(el3);
+    const el4 = new THREE.PointLight(0xffcc44, 10, 20); el4.position.set(3, 2, 5); envScene.add(el4);
+    const envMap = pmremGenerator.fromScene(envScene, 0.04).texture;
+    scene.environment = envMap;
+
+    // 灯光 / Lights
+    scene.add(new THREE.AmbientLight(0x404060, 0.4));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(3, 5, 3);
+    scene.add(dirLight);
+
+    // ===== 地面 / Ground =====
+    // 棋盘格地面 / Checkerboard ground
+    const checkerCanvas = document.createElement('canvas');
+    checkerCanvas.width = 512; checkerCanvas.height = 512;
+    const ctx = checkerCanvas.getContext('2d');
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#666666' : '#aaaaaa';
+        ctx.fillRect(x * 32, y * 32, 32, 32);
+      }
+    }
+    const checkerTex = new THREE.CanvasTexture(checkerCanvas);
+    checkerTex.wrapS = checkerTex.wrapT = THREE.RepeatWrapping;
+    checkerTex.repeat.set(2, 2);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(12, 12),
+      new THREE.MeshStandardMaterial({ map: checkerTex, roughness: 0.5 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // ===== 三个球体 / Three spheres =====
+    const sphereGeo = new THREE.SphereGeometry(0.9, 64, 64);
+
+    // 玻璃球 / Glass sphere
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, roughness: 0.05, metalness: 0,
+      transmission: 1, ior: 1.5, thickness: 0.5,
+    });
+    const glassSphere = new THREE.Mesh(sphereGeo, glassMat);
+    glassSphere.position.set(-2.5, 0.9, 0);
+    scene.add(glassSphere);
+
+    // 清漆球 / Clearcoat sphere
+    const clearcoatMat = new THREE.MeshPhysicalMaterial({
+      color: 0xcc3333, roughness: 0.3, metalness: 0.1,
+      clearcoat: 1, clearcoatRoughness: 0.1,
+    });
+    const clearcoatSphere = new THREE.Mesh(sphereGeo, clearcoatMat);
+    clearcoatSphere.position.set(0, 0.9, 0);
+    scene.add(clearcoatSphere);
+
+    // 光泽球 / Sheen sphere
+    const sheenMat = new THREE.MeshPhysicalMaterial({
+      color: 0x4444aa, roughness: 0.5, metalness: 0,
+      sheen: 1, sheenColor: new THREE.Color(0xff88ff), sheenRoughness: 0.3,
+    });
+    const sheenSphere = new THREE.Mesh(sphereGeo, sheenMat);
+    sheenSphere.position.set(2.5, 0.9, 0);
+    scene.add(sheenSphere);
+
+    const spheres = [
+      { mesh: glassSphere, mat: glassMat, label: document.getElementById('lbl-glass') },
+      { mesh: clearcoatSphere, mat: clearcoatMat, label: document.getElementById('lbl-clearcoat') },
+      { mesh: sheenSphere, mat: sheenMat, label: document.getElementById('lbl-sheen') },
+    ];
+
+    let selectedSphere = 0;
+
+    // ===== UI 绑定 / UI bindings =====
+    const sliders = {
+      rough: { el: document.getElementById('roughSlider'), val: document.getElementById('roughVal') },
+      trans: { el: document.getElementById('transSlider'), val: document.getElementById('transVal') },
+      ior: { el: document.getElementById('iorSlider'), val: document.getElementById('iorVal') },
+      thick: { el: document.getElementById('thickSlider'), val: document.getElementById('thickVal') },
+      cc: { el: document.getElementById('ccSlider'), val: document.getElementById('ccVal') },
+      ccr: { el: document.getElementById('ccrSlider'), val: document.getElementById('ccrVal') },
+      sheen: { el: document.getElementById('sheenSlider'), val: document.getElementById('sheenVal') },
+    };
+
+    function syncSlidersToSphere(idx) {
+      const mat = spheres[idx].mat;
+      sliders.rough.el.value = mat.roughness;
+      sliders.rough.val.textContent = mat.roughness.toFixed(2);
+      if (mat.transmission !== undefined) {
+        sliders.trans.el.value = mat.transmission;
+        sliders.trans.val.textContent = mat.transmission.toFixed(2);
+      }
+      if (mat.ior !== undefined) {
+        sliders.ior.el.value = mat.ior;
+        sliders.ior.val.textContent = mat.ior.toFixed(2);
+      }
+      if (mat.thickness !== undefined) {
+        sliders.thick.el.value = mat.thickness;
+        sliders.thick.val.textContent = mat.thickness.toFixed(2);
+      }
+      if (mat.clearcoat !== undefined) {
+        sliders.cc.el.value = mat.clearcoat;
+        sliders.cc.val.textContent = mat.clearcoat.toFixed(2);
+      }
+      if (mat.clearcoatRoughness !== undefined) {
+        sliders.ccr.el.value = mat.clearcoatRoughness;
+        sliders.ccr.val.textContent = mat.clearcoatRoughness.toFixed(2);
+      }
+      if (mat.sheen !== undefined) {
+        sliders.sheen.el.value = mat.sheen;
+        sliders.sheen.val.textContent = mat.sheen.toFixed(2);
+      }
+    }
+
+    window.selectSphere = function(idx) {
+      selectedSphere = idx;
+      syncSlidersToSphere(idx);
+    };
+
+    function applySlider(key, prop, valEl) {
+      sliders[key].el.addEventListener('input', () => {
+        const v = parseFloat(sliders[key].el.value);
+        sliders[key].val.textContent = v.toFixed(2);
+        const mat = spheres[selectedSphere].mat;
+        if (prop === 'sheenColor') return;
+        mat[prop] = v;
+      });
+    }
+    applySlider('rough', 'roughness');
+    applySlider('trans', 'transmission');
+    applySlider('ior', 'ior');
+    applySlider('thick', 'thickness');
+    applySlider('cc', 'clearcoat');
+    applySlider('ccr', 'clearcoatRoughness');
+    applySlider('sheen', 'sheen');
+
+    // ===== 更新标签位置 / Update label positions =====
+    function updateLabels() {
+      spheres.forEach(({ mesh, label }) => {
+        const pos = mesh.position.clone();
+        pos.y += 1.3;
+        pos.project(camera);
+        const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+        label.style.left = x + 'px';
+        label.style.top = y + 'px';
+        label.style.display = pos.z < 1 ? 'block' : 'none';
+      });
+    }
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      spheres.forEach(s => { s.mesh.rotation.y += 0.003; });
+      controls.update();
+      updateLabels();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

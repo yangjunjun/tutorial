@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01 - 环境光 / AmbientLight</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    /* 信息面板 / Info panel */
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.75); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.6; max-width: 300px;
+      pointer-events: auto; z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    /* 控制按钮 / Control buttons */
+    .ctrl-group { margin-top: 8px; }
+    .ctrl-group label { display: block; margin-bottom: 4px; font-size: 12px; color: #aaa; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .btn {
+      padding: 4px 10px; border: 1px solid #555; border-radius: 4px;
+      background: #333; color: #fff; cursor: pointer; font-size: 12px;
+    }
+    .btn:hover { background: #555; }
+    .btn.active { border-color: #4fc3f7; background: #1a3a4a; }
+    input[type="range"] { width: 100%; margin: 4px 0; }
+    input[type="color"] { width: 40px; height: 24px; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- 信息面板 / Info panel -->
+  <div id="info">
+    <h2>环境光 / AmbientLight</h2>
+    <p>环境光没有方向，均匀照亮场景中所有物体。<br>
+       Ambient light has no direction — it illuminates all objects equally.</p>
+    <p style="color:#ffeb3b;">注意：仅有环境光时，场景看起来很"平"。<br>
+       Notice: with only ambient light, everything looks flat.</p>
+
+    <div class="ctrl-group">
+      <label>光颜色 / Light Color:</label>
+      <div class="btn-row">
+        <button class="btn active" onclick="setColor('#ffffff')">白色/White</button>
+        <button class="btn" onclick="setColor('#ff6666')">红/Red</button>
+        <button class="btn" onclick="setColor('#66ff66')">绿/Green</button>
+        <button class="btn" onclick="setColor('#6666ff')">蓝/Blue</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>强度 / Intensity: <span id="intensityVal">0.5</span></label>
+      <input type="range" id="intensitySlider" min="0" max="2" step="0.05" value="0.5">
+    </div>
+  </div>
+
+  <!-- Three.js 导入映射 / Import map for Three.js -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 场景、相机、渲染器 / Scene, Camera, Renderer =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 轨道控制器 / Orbit Controls =====
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // ===== 环境光 / Ambient Light =====
+    // 环境光均匀照亮所有物体，不产生阴影
+    // Ambient light illuminates all objects equally, no shadows
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    // ===== 创建多个彩色几何体 / Create colored geometric objects =====
+    const objects = [];
+
+    // 使用标准材质来展示光照效果 / Use standard material to show lighting effect
+    function makeMat(color) {
+      return new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.1 });
+    }
+
+    // 立方体 / Cube
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), makeMat(0xe74c3c));
+    cube.position.set(-2, 0.6, 0);
+    scene.add(cube);
+    objects.push(cube);
+
+    // 球体 / Sphere
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.7, 32, 32), makeMat(0x3498db));
+    sphere.position.set(0, 0.7, 0);
+    scene.add(sphere);
+    objects.push(sphere);
+
+    // 圆环结 / Torus Knot
+    const torusKnot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.5, 0.18, 100, 16), makeMat(0x2ecc71));
+    torusKnot.position.set(2, 1, 0);
+    scene.add(torusKnot);
+    objects.push(torusKnot);
+
+    // 圆锥 / Cone
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.4, 32), makeMat(0xf39c12));
+    cone.position.set(0, 0.7, -2);
+    scene.add(cone);
+    objects.push(cone);
+
+    // 十二面体 / Dodecahedron
+    const dodeca = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6), makeMat(0x9b59b6));
+    dodeca.position.set(0, 0.6, 2);
+    scene.add(dodeca);
+    objects.push(dodeca);
+
+    // 地面 / Ground plane
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(12, 12),
+      new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.8 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // ===== UI 控制 / UI Controls =====
+    const intensitySlider = document.getElementById('intensitySlider');
+    const intensityVal = document.getElementById('intensityVal');
+
+    // 修改光颜色 / Change light color
+    window.setColor = function(hex) {
+      ambientLight.color.set(hex);
+      // 更新按钮状态 / Update button states
+      document.querySelectorAll('.btn-row .btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    };
+
+    // 修改光强度 / Change light intensity
+    intensitySlider.addEventListener('input', () => {
+      const v = parseFloat(intensitySlider.value);
+      ambientLight.intensity = v;
+      intensityVal.textContent = v.toFixed(2);
+    });
+
+    // ===== 响应式处理 / Responsive resize =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      // 轻微旋转物体 / Gently rotate objects
+      cube.rotation.y += 0.005;
+      torusKnot.rotation.y += 0.008;
+      dodeca.rotation.y += 0.006;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

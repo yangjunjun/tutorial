@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>射线悬停 / Raycaster Hover Effects - Three.js Tutorial Stage 3</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.75); color: #fff; padding: 14px 18px;
+      border-radius: 8px; font-size: 13px; line-height: 1.7;
+      pointer-events: none; min-width: 220px; user-select: none;
+    }
+    #info h2 { font-size: 15px; margin-bottom: 6px; color: #81d4fa; }
+    /* 工具提示 / Tooltip */
+    #tooltip {
+      position: absolute; display: none;
+      background: rgba(0,0,0,0.82); color: #fff; padding: 6px 12px;
+      border-radius: 6px; font-size: 12px; pointer-events: none;
+      white-space: nowrap; border: 1px solid rgba(255,255,255,0.15);
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- 信息面板 / Info panel -->
+  <div id="info">
+    <h2>射线悬停 / Raycaster Hover</h2>
+    <div>悬停物体查看效果 / Hover over objects</div>
+    <div>鼠标变为指针 / Cursor changes</div>
+    <div>平滑缩放和发光 / Smooth scale & glow</div>
+    <div id="hoverInfo" style="color:#aaa;font-size:12px;margin-top:8px;border-top:1px solid #333;padding-top:8px;">
+      悬停物体: 无 / Hovered: None
+    </div>
+  </div>
+  <!-- 工具提示 / Tooltip -->
+  <div id="tooltip"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 场景 / Scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1117);
+    scene.fog = new THREE.FogExp2(0x0d1117, 0.02);
+
+    // ===== 相机 / Camera =====
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(6, 5, 10);
+
+    // ===== 渲染器 / Renderer =====
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 轨道控制器 / OrbitControls =====
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    // ===== 灯光 / Lights =====
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(10, 15, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // ===== 地面 / Ground =====
+    scene.add(new THREE.GridHelper(30, 30, 0x333355, 0x222244));
+
+    // ===== 创建场景中的物体 / Create scene objects =====
+    const objectData = [
+      { name: '红立方 / Red Cube', geo: new THREE.BoxGeometry(1.2, 1.2, 1.2), color: 0xff6b6b, pos: [-3, 1, 0] },
+      { name: '青球 / Cyan Sphere', geo: new THREE.SphereGeometry(0.7, 32, 32), color: 0x4ecdc4, pos: [0, 1, 0] },
+      { name: '黄锥 / Yellow Cone', geo: new THREE.ConeGeometry(0.6, 1.5, 16), color: 0xffe66d, pos: [3, 1, 0] },
+      { name: '紫环 / Purple Torus', geo: new THREE.TorusGeometry(0.6, 0.25, 16, 48), color: 0xb39ddb, pos: [-3, 1, 3] },
+      { name: '绿八面 / Green Octa', geo: new THREE.OctahedronGeometry(0.7), color: 0xa8e6cf, pos: [0, 1, 3] },
+      { name: '橙结 / Orange Knot', geo: new THREE.TorusKnotGeometry(0.5, 0.18, 64, 8), color: 0xffab91, pos: [3, 1, 3] },
+      { name: '蓝十二 / Blue Dodeca', geo: new THREE.DodecahedronGeometry(0.65), color: 0x82b1ff, pos: [-3, 1, -3] },
+      { name: '粉柱 / Pink Cylinder', geo: new THREE.CylinderGeometry(0.5, 0.5, 1.4, 16), color: 0xf48fb1, pos: [0, 1, -3] },
+      { name: '金二十 / Gold Icosa', geo: new THREE.IcosahedronGeometry(0.65), color: 0xfff59d, pos: [3, 1, -3] },
+    ];
+
+    const objects = [];
+    objectData.forEach(data => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: data.color, roughness: 0.3, metalness: 0.35
+      });
+      const mesh = new THREE.Mesh(data.geo, mat);
+      mesh.position.set(...data.pos);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = {
+        name: data.name,
+        originalColor: data.color,
+        targetScale: 1.0,
+        currentScale: 1.0,
+        targetEmissive: 0,
+        currentEmissive: 0,
+      };
+      scene.add(mesh);
+      objects.push(mesh);
+    });
+
+    // ===== 射线投射 / Raycaster =====
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let hoveredObject = null;
+    const tooltip = document.getElementById('tooltip');
+    const hoverInfo = document.getElementById('hoverInfo');
+
+    // 鼠标移动事件 / Mouse move event
+    renderer.domElement.addEventListener('mousemove', (e) => {
+      // 计算归一化设备坐标 / Calculate normalized device coordinates
+      mouse.x = (e.clientX / innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+
+      // 更新工具提示位置 / Update tooltip position
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY + 15) + 'px';
+    });
+
+    // ===== 响应式画布 / Responsive canvas =====
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      controls.update();
+
+      // 射线检测（仅检测相关物体）/ Raycast (only check relevant objects)
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(objects);
+
+      // 重置之前悬停的物体 / Reset previously hovered object
+      if (hoveredObject) {
+        hoveredObject.userData.targetScale = 1.0;
+        hoveredObject.userData.targetEmissive = 0;
+      }
+
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        hoveredObject = hit;
+        hit.userData.targetScale = 1.25;    // 放大25% / Scale up 25%
+        hit.userData.targetEmissive = 0.5;   // 发光 / Glow
+        // 更改光标 / Change cursor
+        renderer.domElement.style.cursor = 'pointer';
+        // 显示工具提示 / Show tooltip
+        tooltip.style.display = 'block';
+        tooltip.textContent = hit.userData.name;
+        hoverInfo.textContent = `悬停物体 / Hovered: ${hit.userData.name}`;
+      } else {
+        hoveredObject = null;
+        renderer.domElement.style.cursor = 'default';
+        tooltip.style.display = 'none';
+        hoverInfo.textContent = '悬停物体: 无 / Hovered: None';
+      }
+
+      // 平滑过渡效果 / Smooth transition effects
+      const lerpSpeed = 8 * delta;
+      objects.forEach(obj => {
+        const ud = obj.userData;
+        // 平滑缩放 / Smooth scale
+        ud.currentScale = THREE.MathUtils.lerp(ud.currentScale, ud.targetScale, lerpSpeed);
+        obj.scale.setScalar(ud.currentScale);
+        // 平滑发光 / Smooth emissive
+        ud.currentEmissive = THREE.MathUtils.lerp(ud.currentEmissive, ud.targetEmissive, lerpSpeed);
+        obj.material.emissive.setHex(ud.originalColor);
+        obj.material.emissiveIntensity = ud.currentEmissive;
+        // 轻微旋转 / Slight rotation
+        obj.rotation.y += 0.005;
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

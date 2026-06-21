@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>补间动画 / Tween Animation with GSAP - Three.js Tutorial Stage 3</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.75); color: #fff; padding: 14px 18px;
+      border-radius: 8px; font-size: 13px; line-height: 1.7;
+      pointer-events: auto; min-width: 260px; user-select: none;
+    }
+    #info h2 { font-size: 15px; margin-bottom: 8px; color: #f48fb1; }
+    #info button {
+      display: block; width: 100%; margin: 3px 0; padding: 6px 10px;
+      background: #333; color: #fff; border: 1px solid #555; border-radius: 5px;
+      cursor: pointer; font-size: 12px; text-align: left;
+      transition: background 0.2s;
+    }
+    #info button:hover { background: #555; }
+    #info .section { color: #aaa; font-size: 11px; margin-top: 8px; border-top: 1px solid #333; padding-top: 6px; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- 信息面板 / Info panel -->
+  <div id="info">
+    <h2>补间动画 / GSAP Tween</h2>
+    <button id="btnMove">位移 / Position Tween</button>
+    <button id="btnRotate">旋转 / Rotation Tween (360deg)</button>
+    <button id="btnScale">缩放 / Scale Tween</button>
+    <button id="btnColor">颜色 / Color Tween</button>
+    <button id="btnStagger">交错动画 / Stagger</button>
+    <div class="section">缓动类型 / Easing Types:</div>
+    <button id="btnElastic">Elastic 弹性</button>
+    <button id="btnBounce">Bounce 弹跳</button>
+    <button id="btnBack">Back 回弹</button>
+    <div class="section">时间线 / Timeline:</div>
+    <button id="btnTimeline">序列动画 / Sequence</button>
+    <button id="btnReset">重置 / Reset All</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 场景 / Scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    scene.fog = new THREE.FogExp2(0x1a1a2e, 0.015);
+
+    // ===== 相机 / Camera =====
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(6, 5, 10);
+
+    // ===== 渲染器 / Renderer =====
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 轨道控制器 / OrbitControls =====
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    // ===== 灯光 / Lights =====
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(10, 15, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // ===== 地面 / Ground =====
+    scene.add(new THREE.GridHelper(20, 20, 0x444466, 0x222244));
+
+    // ===== 中心物体 / Central object =====
+    const mainGeo = new THREE.TorusKnotGeometry(0.8, 0.3, 100, 16);
+    const mainMat = new THREE.MeshStandardMaterial({ color: 0xf48fb1, roughness: 0.25, metalness: 0.6 });
+    const mainMesh = new THREE.Mesh(mainGeo, mainMat);
+    mainMesh.position.set(0, 2, 0);
+    mainMesh.castShadow = true;
+    scene.add(mainMesh);
+
+    // 保存初始状态 / Save initial state
+    const initState = {
+      posX: 0, posY: 2, posZ: 0,
+      rotX: 0, rotY: 0, rotZ: 0,
+      scaleX: 1, scaleY: 1, scaleZ: 1,
+      colorR: mainMat.color.r, colorG: mainMat.color.g, colorB: mainMat.color.b,
+    };
+
+    // ===== 交错动画用的小物体 / Small objects for stagger animation =====
+    const staggerObjects = [];
+    const staggerColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0xa8e6cf, 0x82b1ff, 0xb39ddb, 0xffab91, 0x80cbc4];
+    for (let i = 0; i < 8; i++) {
+      const geo = new THREE.SphereGeometry(0.3, 24, 24);
+      const mat = new THREE.MeshStandardMaterial({ color: staggerColors[i], roughness: 0.3, metalness: 0.4 });
+      const mesh = new THREE.Mesh(geo, mat);
+      const angle = (i / 8) * Math.PI * 2;
+      mesh.position.set(Math.cos(angle) * 4, 0.5, Math.sin(angle) * 4);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      staggerObjects.push(mesh);
+    }
+
+    // ===== GSAP 动画函数 / GSAP animation functions =====
+
+    // 位移补间 / Position tween - move to random position
+    document.getElementById('btnMove').addEventListener('click', () => {
+      gsap.to(mainMesh.position, {
+        x: (Math.random() - 0.5) * 6,
+        y: 1 + Math.random() * 3,
+        z: (Math.random() - 0.5) * 6,
+        duration: 1.2,
+        ease: 'power2.inOut'
+      });
+    });
+
+    // 旋转补间 / Rotation tween - spin 360 degrees
+    document.getElementById('btnRotate').addEventListener('click', () => {
+      gsap.to(mainMesh.rotation, {
+        y: mainMesh.rotation.y + Math.PI * 2,
+        duration: 1.5,
+        ease: 'power2.inOut'
+      });
+    });
+
+    // 缩放补间 / Scale tween - grow and shrink
+    document.getElementById('btnScale').addEventListener('click', () => {
+      gsap.to(mainMesh.scale, {
+        x: 1.8, y: 1.8, z: 1.8,
+        duration: 0.6,
+        ease: 'power2.out',
+        yoyo: true,
+        repeat: 1
+      });
+    });
+
+    // 颜色补间 / Color tween - change material color
+    document.getElementById('btnColor').addEventListener('click', () => {
+      const targetColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+      gsap.to(mainMat.color, {
+        r: targetColor.r,
+        g: targetColor.g,
+        b: targetColor.b,
+        duration: 1.0,
+        ease: 'power2.inOut'
+      });
+    });
+
+    // 交错动画 / Staggered animation of multiple objects
+    document.getElementById('btnStagger').addEventListener('click', () => {
+      staggerObjects.forEach((obj) => {
+        obj.position.y = 0.5;
+        obj.scale.setScalar(1);
+      });
+      gsap.to(staggerObjects.map(o => o.position), {
+        y: 3,
+        duration: 0.6,
+        stagger: 0.1,        // 每个物体间隔0.1秒 / 0.1s delay between each
+        ease: 'power2.out',
+        yoyo: true,
+        repeat: 1
+      });
+      gsap.to(staggerObjects.map(o => o.scale), {
+        x: 1.5, y: 1.5, z: 1.5,
+        duration: 0.4,
+        stagger: 0.1,
+        ease: 'power2.out',
+        yoyo: true,
+        repeat: 1
+      });
+    });
+
+    // 缓动：弹性 / Easing: Elastic
+    document.getElementById('btnElastic').addEventListener('click', () => {
+      gsap.fromTo(mainMesh.scale,
+        { x: 0.1, y: 0.1, z: 0.1 },
+        { x: 1, y: 1, z: 1, duration: 1.5, ease: 'elastic.out(1, 0.3)' }
+      );
+    });
+
+    // 缓动：弹跳 / Easing: Bounce
+    document.getElementById('btnBounce').addEventListener('click', () => {
+      gsap.fromTo(mainMesh.position,
+        { y: 6 },
+        { y: 1.5, duration: 2, ease: 'bounce.out' }
+      );
+    });
+
+    // 缓动：回弹 / Easing: Back
+    document.getElementById('btnBack').addEventListener('click', () => {
+      gsap.fromTo(mainMesh.scale,
+        { x: 0, y: 0, z: 0 },
+        { x: 1, y: 1, z: 1, duration: 1, ease: 'back.out(1.7)' }
+      );
+    });
+
+    // 时间线序列 / Timeline sequencing demo
+    document.getElementById('btnTimeline').addEventListener('click', () => {
+      const tl = gsap.timeline();
+      tl.to(mainMesh.position, { y: 4, duration: 0.5, ease: 'power2.out' })
+        .to(mainMesh.rotation, { y: mainMesh.rotation.y + Math.PI * 2, duration: 1, ease: 'power2.inOut' }, '-=0.2')
+        .to(mainMesh.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.4, ease: 'back.out(2)' }, '-=0.3')
+        .to(mainMat.color, { r: 0.2, g: 0.8, b: 1.0, duration: 0.5 }, '-=0.2')
+        .to(mainMesh.position, { y: 2, duration: 0.6, ease: 'bounce.out' })
+        .to(mainMesh.scale, { x: 1, y: 1, z: 1, duration: 0.3, ease: 'power2.inOut' }, '-=0.2');
+    });
+
+    // 重置 / Reset all
+    document.getElementById('btnReset').addEventListener('click', () => {
+      gsap.killTweensOf(mainMesh.position);
+      gsap.killTweensOf(mainMesh.rotation);
+      gsap.killTweensOf(mainMesh.scale);
+      gsap.killTweensOf(mainMat.color);
+      staggerObjects.forEach(o => {
+        gsap.killTweensOf(o.position);
+        gsap.killTweensOf(o.scale);
+      });
+      gsap.to(mainMesh.position, { x: initState.posX, y: initState.posY, z: initState.posZ, duration: 0.5 });
+      gsap.to(mainMesh.rotation, { x: 0, y: 0, z: 0, duration: 0.5 });
+      gsap.to(mainMesh.scale, { x: 1, y: 1, z: 1, duration: 0.5 });
+      gsap.to(mainMat.color, { r: initState.colorR, g: initState.colorG, b: initState.colorB, duration: 0.5 });
+      staggerObjects.forEach(obj => {
+        gsap.to(obj.position, { y: 0.5, duration: 0.4 });
+        gsap.to(obj.scale, { x: 1, y: 1, z: 1, duration: 0.4 });
+      });
+    });
+
+    // ===== 响应式画布 / Responsive canvas =====
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      // 交错物体轻微旋转 / Slight rotation for stagger objects
+      staggerObjects.forEach((obj, i) => { obj.rotation.y += 0.01 * (i % 2 === 0 ? 1 : -1); });
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

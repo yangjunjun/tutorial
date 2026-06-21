@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 - 纹理贴图 / Texture Mapping</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.5; max-width: 340px;
+      pointer-events: auto; z-index: 10; max-height: 90vh; overflow-y: auto;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .ctrl-group { margin-top: 6px; }
+    .ctrl-group label { display: block; margin-bottom: 2px; font-size: 12px; color: #aaa; }
+    input[type="range"] { width: 100%; margin: 2px 0 4px; }
+    .val { color: #4fc3f7; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+    .btn {
+      padding: 3px 8px; border: 1px solid #555; border-radius: 4px;
+      background: #333; color: #fff; cursor: pointer; font-size: 11px;
+    }
+    .btn:hover { background: #555; }
+    .btn.active { border-color: #4fc3f7; background: #1a3a4a; }
+    .section { border-top: 1px solid #333; padding-top: 6px; margin-top: 8px; }
+    /* 标签 / Labels */
+    .obj-label {
+      position: absolute; color: #fff; font-size: 13px; font-weight: bold;
+      background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 4px;
+      pointer-events: none; z-index: 5; transform: translate(-50%, -100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="obj-label" id="lbl-cube">立方体: 棋盘格/Cube: Checkerboard</div>
+  <div class="obj-label" id="lbl-sphere">球体: 噪声法线/Sphere: Noise Normal</div>
+  <div class="obj-label" id="lbl-plane">平面: 渐变粗糙度/Plane: Gradient Roughness</div>
+
+  <div id="info">
+    <h2>纹理贴图 / Texture Mapping</h2>
+    <p>使用 Canvas 程序化生成纹理，无需外部图片文件。<br>
+       Procedurally generated textures using Canvas — no external image files needed.</p>
+
+    <div class="ctrl-group">
+      <label>贴图通道 / Texture Channel:</label>
+      <div class="btn-row">
+        <button class="btn active" onclick="showChannel('all')">全部/All</button>
+        <button class="btn" onclick="showChannel('color')">颜色/Color</button>
+        <button class="btn" onclick="showChannel('normal')">法线/Normal</button>
+        <button class="btn" onclick="showChannel('roughness')">粗糙度/Roughness</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="ctrl-group">
+        <label>UV 重复 / UV Repeat: <span class="val" id="repeatVal">2</span></label>
+        <input type="range" id="repeatSlider" min="1" max="8" step="1" value="2">
+      </div>
+      <div class="ctrl-group">
+        <label>法线强度 / Normal Scale: <span class="val" id="normalVal">1.0</span></label>
+        <input type="range" id="normalSlider" min="0" max="3" step="0.1" value="1">
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础场景 / Basic scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1, 0);
+
+    // 灯光 / Lights
+    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x362d1b, 0.4));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(3, 5, 3);
+    scene.add(dirLight);
+
+    // ===== 程序化纹理生成 / Procedural texture generation =====
+
+    // 1. 棋盘格纹理 / Checkerboard pattern
+    function createCheckerboard(size, tiles) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const tileSize = size / tiles;
+      for (let y = 0; y < tiles; y++) {
+        for (let x = 0; x < tiles; x++) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? '#ffcc44' : '#2255aa';
+          ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // 2. 噪声法线贴图 / Noise normal map
+    // 法线贴图中：R=X偏移, G=Y偏移, B=Z方向（蓝色为主表示朝上）
+    // In normal maps: R=X offset, G=Y offset, B=Z direction (mostly blue = pointing up)
+    function createNoiseNormalMap(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(size, size);
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        // 基础法线方向 (0.5, 0.5, 1.0) 映射到 (128, 128, 255)
+        // Base normal direction (0.5, 0.5, 1.0) mapped to (128, 128, 255)
+        const nx = 128 + (Math.random() - 0.5) * 80;
+        const ny = 128 + (Math.random() - 0.5) * 80;
+        imageData.data[i] = nx;     // R
+        imageData.data[i + 1] = ny; // G
+        imageData.data[i + 2] = 255; // B (pointing up)
+        imageData.data[i + 3] = 255; // A
+      }
+      ctx.putImageData(imageData, 0, 0);
+      // 模糊处理使法线更平滑 / Blur for smoother normals
+      ctx.filter = 'blur(2px)';
+      ctx.drawImage(canvas, 0, 0);
+      ctx.filter = 'none';
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // 3. 渐变粗糙度贴图 / Gradient roughness map
+    // 白色=粗糙, 黑色=光滑 / White=rough, Black=smooth
+    function createGradientRoughnessMap(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // 径向渐变：中心光滑，边缘粗糙 / Radial gradient: smooth center, rough edges
+      const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+      gradient.addColorStop(0, '#000000');  // 光滑 / Smooth
+      gradient.addColorStop(0.5, '#888888');
+      gradient.addColorStop(1, '#ffffff');  // 粗糙 / Rough
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // 4. 彩色噪声纹理 / Color noise texture
+    function createNoiseColorMap(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(size, size);
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const px = (i / 4) % size;
+        const py = Math.floor((i / 4) / size);
+        // 渐变 + 噪声 / Gradient + noise
+        const t = py / size;
+        imageData.data[i] = Math.floor(50 + t * 150 + Math.random() * 40);    // R
+        imageData.data[i + 1] = Math.floor(100 + Math.sin(px * 0.05) * 60);   // G
+        imageData.data[i + 2] = Math.floor(180 + Math.cos(t * Math.PI) * 75); // B
+        imageData.data[i + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // ===== 创建纹理 / Create textures =====
+    const checkerTex = createCheckerboard(512, 8);
+    checkerTex.wrapS = checkerTex.wrapT = THREE.RepeatWrapping;
+    checkerTex.repeat.set(2, 2);
+
+    const normalTex = createNoiseNormalMap(512);
+    normalTex.wrapS = normalTex.wrapT = THREE.RepeatWrapping;
+    normalTex.repeat.set(2, 2);
+
+    const roughnessTex = createGradientRoughnessMap(512);
+    roughnessTex.wrapS = roughnessTex.wrapT = THREE.RepeatWrapping;
+    roughnessTex.repeat.set(2, 2);
+
+    const noiseColorTex = createNoiseColorMap(512);
+    noiseColorTex.wrapS = noiseColorTex.wrapT = THREE.RepeatWrapping;
+    noiseColorTex.repeat.set(2, 2);
+
+    // ===== 物体 / Objects =====
+    const allTextures = []; // 追踪所有纹理 / Track all textures
+
+    // 立方体：棋盘格颜色贴图 / Cube: checkerboard color map
+    const cubeMat = new THREE.MeshStandardMaterial({
+      map: checkerTex, roughness: 0.5, metalness: 0.1,
+    });
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), cubeMat);
+    cube.position.set(-2.5, 0.75, 0);
+    scene.add(cube);
+
+    // 球体：噪声颜色 + 法线贴图 / Sphere: noise color + normal map
+    const sphereMat = new THREE.MeshStandardMaterial({
+      map: noiseColorTex, normalMap: normalTex, normalScale: new THREE.Vector2(1, 1),
+      roughness: 0.4, metalness: 0.2,
+    });
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 48), sphereMat);
+    sphere.position.set(0, 1, 0);
+    scene.add(sphere);
+
+    // 平面：颜色 + 粗糙度贴图 / Plane: color + roughness map
+    const planeMat = new THREE.MeshStandardMaterial({
+      map: checkerTex, roughnessMap: roughnessTex, roughness: 1.0, metalness: 0.1,
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), planeMat);
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.set(0, 0, 0);
+    scene.add(plane);
+
+    // 地面 / Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 14),
+      new THREE.MeshStandardMaterial({ color: 0x444455, roughness: 0.9 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    scene.add(ground);
+
+    allTextures.push(checkerTex, normalTex, roughnessTex, noiseColorTex);
+
+    // ===== 标签更新 / Label update =====
+    const labels = [
+      { pos: cube.position, el: document.getElementById('lbl-cube'), yOff: 1.5 },
+      { pos: sphere.position, el: document.getElementById('lbl-sphere'), yOff: 1.5 },
+      { pos: new THREE.Vector3(0, 0, 0), el: document.getElementById('lbl-plane'), yOff: 0.8 },
+    ];
+
+    function updateLabels() {
+      labels.forEach(({ pos, el, yOff }) => {
+        const p = pos.clone(); p.y += yOff;
+        p.project(camera);
+        const x = (p.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-p.y * 0.5 + 0.5) * window.innerHeight;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        el.style.display = p.z < 1 ? 'block' : 'none';
+      });
+    }
+
+    // ===== UI 控制 / UI controls =====
+    window.showChannel = function(channel) {
+      // 根据选择的通道显示/隐藏纹理 / Show/hide textures based on channel
+      if (channel === 'all') {
+        cubeMat.map = checkerTex;
+        sphereMat.map = noiseColorTex;
+        sphereMat.normalMap = normalTex;
+        planeMat.map = checkerTex;
+        planeMat.roughnessMap = roughnessTex;
+      } else if (channel === 'color') {
+        cubeMat.map = checkerTex;
+        sphereMat.map = noiseColorTex;
+        sphereMat.normalMap = null;
+        planeMat.map = checkerTex;
+        planeMat.roughnessMap = null;
+      } else if (channel === 'normal') {
+        cubeMat.map = null;
+        sphereMat.map = null;
+        sphereMat.normalMap = normalTex;
+        planeMat.map = null;
+        planeMat.roughnessMap = null;
+      } else if (channel === 'roughness') {
+        cubeMat.map = null;
+        sphereMat.map = null;
+        sphereMat.normalMap = null;
+        planeMat.map = null;
+        planeMat.roughnessMap = roughnessTex;
+      }
+      [cubeMat, sphereMat, planeMat].forEach(m => m.needsUpdate = true);
+      document.querySelectorAll('.btn-row .btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    };
+
+    document.getElementById('repeatSlider').addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      document.getElementById('repeatVal').textContent = v;
+      allTextures.forEach(tex => {
+        tex.repeat.set(v, v);
+      });
+    });
+
+    document.getElementById('normalSlider').addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('normalVal').textContent = v.toFixed(1);
+      sphereMat.normalScale.set(v, v);
+    });
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    function animate() {
+      requestAnimationFrame(animate);
+      cube.rotation.y += 0.005;
+      sphere.rotation.y += 0.003;
+      controls.update();
+      updateLabels();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

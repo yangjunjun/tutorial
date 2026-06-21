@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 - 练习：材质展厅 / Practice: Material Gallery</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-size: 13px; line-height: 1.5; max-width: 340px;
+      pointer-events: auto; z-index: 10;
+    }
+    #info h2 { margin: 0 0 6px; font-size: 15px; color: #4fc3f7; }
+    .obj-label {
+      position: absolute; color: #fff; font-size: 13px; font-weight: bold;
+      background: rgba(0,0,0,0.65); padding: 4px 10px; border-radius: 6px;
+      pointer-events: none; z-index: 5; transform: translate(-50%, -100%);
+      text-align: center; line-height: 1.4;
+    }
+    .obj-label small { display: block; font-size: 10px; color: #aaa; font-weight: normal; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>材质展厅 / Material Gallery</h2>
+    <p>一个展示空间，陈列六种不同材质的球体。使用鼠标旋转、缩放来探索。<br>
+       A showroom displaying six spheres with different materials. Use mouse to orbit and zoom.</p>
+    <p style="font-size:12px; color:#aaa; margin-top:6px;">
+      拖拽旋转 | 滚轮缩放 | 右键平移<br>
+      Drag to orbit | Scroll to zoom | Right-click to pan
+    </p>
+  </div>
+
+  <!-- 六个材质标签 / Six material labels -->
+  <div class="obj-label" id="lbl-0"></div>
+  <div class="obj-label" id="lbl-1"></div>
+  <div class="obj-label" id="lbl-2"></div>
+  <div class="obj-label" id="lbl-3"></div>
+  <div class="obj-label" id="lbl-4"></div>
+  <div class="obj-label" id="lbl-5"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基础场景 / Basic scene =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    // 添加雾效 / Add fog
+    scene.fog = new THREE.Fog(0x1a1a2e, 12, 25);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(6, 4, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 1, 0);
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // 限制相机不低于地面 / Limit camera above ground
+    controls.minDistance = 3;
+    controls.maxDistance = 16;
+
+    // ===== 环境光照 / Environment lighting =====
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x362d1b, 0.4);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(5, 8, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 30;
+    dirLight.shadow.camera.left = -10;
+    dirLight.shadow.camera.right = 10;
+    dirLight.shadow.camera.top = 10;
+    dirLight.shadow.camera.bottom = -10;
+    scene.add(dirLight);
+
+    // 补光 / Fill light
+    const fillLight = new THREE.DirectionalLight(0x6688cc, 0.6);
+    fillLight.position.set(-3, 4, -2);
+    scene.add(fillLight);
+
+    // 环境贴图 / Environment map
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color(0x556688);
+    envScene.add(new THREE.PointLight(0xff6644, 12, 20).translateX(5).translateY(5));
+    envScene.add(new THREE.PointLight(0x4466ff, 12, 20).translateX(-5).translateY(3));
+    envScene.add(new THREE.PointLight(0x44ff66, 8, 20).translateZ(5).translateY(2));
+    const envMap = pmremGenerator.fromScene(envScene, 0.04).texture;
+    scene.environment = envMap;
+
+    // ===== 展厅地板 / Gallery floor =====
+    // 使用程序化大理石纹理 / Procedural marble texture
+    const floorCanvas = document.createElement('canvas');
+    floorCanvas.width = 512; floorCanvas.height = 512;
+    const fCtx = floorCanvas.getContext('2d');
+    // 基础色 / Base color
+    fCtx.fillStyle = '#3a3a4a';
+    fCtx.fillRect(0, 0, 512, 512);
+    // 噪声纹理 / Noise texture
+    for (let i = 0; i < 50000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const g = Math.floor(40 + Math.random() * 30);
+      fCtx.fillStyle = `rgba(${g},${g},${g + 10},0.3)`;
+      fCtx.fillRect(x, y, 2, 2);
+    }
+    // 网格线 / Grid lines
+    fCtx.strokeStyle = 'rgba(100,100,120,0.3)';
+    fCtx.lineWidth = 1;
+    for (let i = 0; i <= 512; i += 64) {
+      fCtx.beginPath(); fCtx.moveTo(i, 0); fCtx.lineTo(i, 512); fCtx.stroke();
+      fCtx.beginPath(); fCtx.moveTo(0, i); fCtx.lineTo(512, i); fCtx.stroke();
+    }
+    const floorTex = new THREE.CanvasTexture(floorCanvas);
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(4, 4);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6, metalness: 0.1 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // ===== 展台和球体 / Pedestals and spheres =====
+    const pedestalGeo = new THREE.CylinderGeometry(0.5, 0.6, 1.2, 32);
+    const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x666677, roughness: 0.3, metalness: 0.5 });
+    const sphereGeo = new THREE.SphereGeometry(0.6, 64, 64);
+
+    // 材质数据 / Material data
+    const materialData = [
+      {
+        name: '黄金金属', nameEn: 'Gold Metal',
+        mat: new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.15, metalness: 1.0 }),
+      },
+      {
+        name: '粗糙石材', nameEn: 'Rough Stone',
+        mat: new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.95, metalness: 0.0 }),
+      },
+      {
+        name: '光滑塑料', nameEn: 'Shiny Plastic',
+        mat: new THREE.MeshStandardMaterial({ color: 0xff4466, roughness: 0.3, metalness: 0.0 }),
+      },
+      {
+        name: '玻璃', nameEn: 'Glass',
+        mat: new THREE.MeshPhysicalMaterial({
+          color: 0xffffff, roughness: 0.05, metalness: 0,
+          transmission: 0.95, ior: 1.5, thickness: 0.5,
+        }),
+      },
+      {
+        name: '卡通', nameEn: 'Toon',
+        mat: (() => {
+          // 创建3阶渐变 / Create 3-step gradient
+          const c = document.createElement('canvas');
+          c.width = 3; c.height = 1;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#444'; ctx.fillRect(0, 0, 1, 1);
+          ctx.fillStyle = '#999'; ctx.fillRect(1, 0, 1, 1);
+          ctx.fillStyle = '#fff'; ctx.fillRect(2, 0, 1, 1);
+          const tex = new THREE.CanvasTexture(c);
+          tex.minFilter = THREE.NearestFilter;
+          tex.magFilter = THREE.NearestFilter;
+          return new THREE.MeshToonMaterial({ color: 0x44cc88, gradientMap: tex });
+        })(),
+      },
+      {
+        name: '线框', nameEn: 'Wireframe',
+        mat: new THREE.MeshStandardMaterial({
+          color: 0x44aaff, roughness: 0.5, metalness: 0.3, wireframe: true,
+        }),
+      },
+    ];
+
+    const sphereMeshes = [];
+    const radius = 4; // 展台围成圆圈 / Pedestals in a circle
+
+    materialData.forEach((data, i) => {
+      const angle = (i / materialData.length) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+
+      // 展台 / Pedestal
+      const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat.clone());
+      pedestal.position.set(x, 0.6, z);
+      pedestal.castShadow = true;
+      pedestal.receiveShadow = true;
+      scene.add(pedestal);
+
+      // 球体 / Sphere
+      const sphere = new THREE.Mesh(sphereGeo, data.mat);
+      sphere.position.set(x, 1.8, z);
+      sphere.castShadow = true;
+      scene.add(sphere);
+      sphereMeshes.push(sphere);
+
+      // 设置标签文字 / Set label text
+      const label = document.getElementById(`lbl-${i}`);
+      label.innerHTML = `${data.name}<small>${data.nameEn}</small>`;
+    });
+
+    // ===== 聚光灯照亮每个展台 / Spotlights illuminating each pedestal =====
+    materialData.forEach((_, i) => {
+      const angle = (i / materialData.length) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+
+      const spot = new THREE.SpotLight(0xffffff, 1.5, 8, 0.4, 0.5, 1.5);
+      spot.position.set(x, 5, z);
+      spot.target.position.set(x, 1.5, z);
+      scene.add(spot);
+      scene.add(spot.target);
+    });
+
+    // ===== 标签更新 / Label positioning =====
+    function updateLabels() {
+      materialData.forEach((_, i) => {
+        const angle = (i / materialData.length) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const pos = new THREE.Vector3(x, 2.8, z);
+        pos.project(camera);
+        const sx = (pos.x * 0.5 + 0.5) * window.innerWidth;
+        const sy = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+        const label = document.getElementById(`lbl-${i}`);
+        label.style.left = sx + 'px';
+        label.style.top = sy + 'px';
+        label.style.display = pos.z < 1 ? 'block' : 'none';
+      });
+    }
+
+    // ===== 响应式 / Responsive =====
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ===== 动画循环 / Animation loop =====
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      // 球体缓慢旋转和浮动 / Spheres slowly rotate and float
+      sphereMeshes.forEach((s, i) => {
+        s.rotation.y = t * 0.3 + i * 1.0;
+        s.position.y = 1.8 + Math.sin(t * 0.8 + i * 1.2) * 0.1;
+      });
+
+      controls.update();
+      updateLabels();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

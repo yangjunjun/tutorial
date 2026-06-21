@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03 - 几何体合并 / Merge Geometries</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #1a1a2e; }
+        canvas { display: block; }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            min-width: 320px;
+            z-index: 100;
+        }
+        #info-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #4fc3f7;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+        .metric-label { color: #aaa; }
+        .metric-value { color: #4fc3f7; font-weight: bold; }
+        .good { color: #4caf50; }
+        .bad { color: #f44336; }
+        .comparison {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+        .comparison-title {
+            color: #ffeb3b;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .btn-group { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 14px;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .btn-individual { background: #f44336; color: #fff; }
+        .btn-individual.active { border-color: #fff; }
+        .btn-merged { background: #4caf50; color: #fff; }
+        .btn-merged.active { border-color: #fff; }
+        .btn-scene { background: #9c27b0; color: #fff; }
+        #fps-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #4caf50;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h2>几何体合并 / Merge Geometries</h2>
+        <div class="metric-row">
+            <span class="metric-label">Mode:</span>
+            <span class="metric-value" id="current-mode">Individual</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Draw Calls:</span>
+            <span class="metric-value" id="draw-calls">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Triangles:</span>
+            <span class="metric-value" id="triangles">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Geometries:</span>
+            <span class="metric-value" id="geometries">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Objects:</span>
+            <span class="metric-value" id="objects">0</span>
+        </div>
+        <div class="comparison">
+            <div class="comparison-title">Draw Call Comparison / 绘制调用对比</div>
+            <div class="metric-row">
+                <span class="metric-label">Individual:</span>
+                <span class="metric-value bad" id="dc-individual">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Merged:</span>
+                <span class="metric-value good" id="dc-merged">--</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-individual active" id="btn-individual">Individual Meshes</button>
+            <button class="btn btn-merged" id="btn-merged">Merged Geometry</button>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-scene" id="btn-floor">Floor (20x20)</button>
+            <button class="btn btn-scene" id="btn-wall">Wall (15x10)</button>
+            <button class="btn btn-scene" id="btn-pillars">Pillars (50)</button>
+        </div>
+    </div>
+
+    <div id="fps-display">FPS: --</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        // 导入几何体合并工具 / Import geometry merge utility
+        import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+        // ============================================
+        // 场景初始化 / Scene Initialization
+        // ============================================
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(25, 20, 25);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // ============================================
+        // 灯光 / Lighting
+        // ============================================
+
+        scene.add(new THREE.AmbientLight(0x404060, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(15, 25, 15);
+        scene.add(dirLight);
+
+        const gridHelper = new THREE.GridHelper(60, 60, 0x444466, 0x333355);
+        scene.add(gridHelper);
+
+        // ============================================
+        // 场景管理 / Scene Management
+        // ============================================
+
+        let currentMode = 'individual'; // 'individual' or 'merged'
+        let individualMeshes = []; // 独立网格数组 / Array of individual meshes
+        let mergedMesh = null; // 合并后的网格 / Merged mesh
+        let currentSceneType = 'floor';
+
+        // 存储 draw call 数据用于对比 / Store draw call data for comparison
+        const drawCallData = { individual: 0, merged: 0 };
+
+        // ============================================
+        // 创建地板瓦片 / Create Floor Tiles
+        // ============================================
+
+        function createFloorTiles(rows, cols) {
+            const geometries = [];
+            const tileSize = 1.0;
+            const gap = 0.05;
+
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    // 创建瓦片几何体 / Create tile geometry
+                    const geom = new THREE.BoxGeometry(tileSize - gap, 0.1, tileSize - gap);
+
+                    // 应用变换到几何体 / Apply transform to geometry
+                    const x = (j - cols / 2) * tileSize;
+                    const z = (i - rows / 2) * tileSize;
+                    geom.translate(x, 0.05, z);
+
+                    // 添加颜色属性 / Add color attribute
+                    const color = new THREE.Color().setHSL(
+                        0.55 + Math.random() * 0.1,
+                        0.3 + Math.random() * 0.2,
+                        0.3 + Math.random() * 0.2
+                    );
+                    const colors = new Float32Array(geom.attributes.position.count * 3);
+                    for (let k = 0; k < colors.length; k += 3) {
+                        colors[k] = color.r;
+                        colors[k + 1] = color.g;
+                        colors[k + 2] = color.b;
+                    }
+                    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+                    geometries.push(geom);
+                }
+            }
+            return geometries;
+        }
+
+        // ============================================
+        // 创建砖墙 / Create Brick Wall
+        // ============================================
+
+        function createBrickWall(rows, cols) {
+            const geometries = [];
+            const brickWidth = 1.0;
+            const brickHeight = 0.4;
+            const brickDepth = 0.5;
+            const gap = 0.03;
+
+            for (let i = 0; i < rows; i++) {
+                const offset = (i % 2 === 0) ? 0 : brickWidth / 2; // 交错排列 / Staggered layout
+                for (let j = 0; j < cols; j++) {
+                    const geom = new THREE.BoxGeometry(
+                        brickWidth - gap,
+                        brickHeight - gap,
+                        brickDepth
+                    );
+
+                    const x = (j - cols / 2) * brickWidth + offset;
+                    const y = i * brickHeight + brickHeight / 2;
+                    geom.translate(x, y, -10);
+
+                    // 砖块颜色 / Brick color
+                    const color = new THREE.Color().setHSL(
+                        0.02 + Math.random() * 0.03,
+                        0.6 + Math.random() * 0.2,
+                        0.3 + Math.random() * 0.15
+                    );
+                    const colors = new Float32Array(geom.attributes.position.count * 3);
+                    for (let k = 0; k < colors.length; k += 3) {
+                        colors[k] = color.r;
+                        colors[k + 1] = color.g;
+                        colors[k + 2] = color.b;
+                    }
+                    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+                    geometries.push(geom);
+                }
+            }
+            return geometries;
+        }
+
+        // ============================================
+        // 创建柱子 / Create Pillars
+        // ============================================
+
+        function createPillars(count) {
+            const geometries = [];
+            const radius = 12;
+
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                const height = 3 + Math.random() * 4;
+
+                // 柱体 / Pillar body
+                const pillarGeom = new THREE.CylinderGeometry(0.3, 0.4, height, 8);
+                pillarGeom.translate(x, height / 2, z);
+
+                // 柱顶 / Pillar cap
+                const capGeom = new THREE.BoxGeometry(0.8, 0.2, 0.8);
+                capGeom.translate(x, height + 0.1, z);
+
+                // 柱基 / Pillar base
+                const baseGeom = new THREE.BoxGeometry(0.9, 0.2, 0.9);
+                baseGeom.translate(x, 0.1, z);
+
+                const color = new THREE.Color().setHSL(0.08, 0.1, 0.6 + Math.random() * 0.2);
+                [pillarGeom, capGeom, baseGeom].forEach(geom => {
+                    const colors = new Float32Array(geom.attributes.position.count * 3);
+                    for (let k = 0; k < colors.length; k += 3) {
+                        colors[k] = color.r;
+                        colors[k + 1] = color.g;
+                        colors[k + 2] = color.b;
+                    }
+                    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    geometries.push(geom);
+                });
+            }
+            return geometries;
+        }
+
+        // ============================================
+        // 构建场景 / Build Scene
+        // ============================================
+
+        function buildScene(type) {
+            // 清理旧场景 / Clean up old scene
+            clearScene();
+            currentSceneType = type;
+
+            let geometries;
+            switch (type) {
+                case 'floor':
+                    geometries = createFloorTiles(20, 20);
+                    break;
+                case 'wall':
+                    geometries = createBrickWall(10, 15);
+                    break;
+                case 'pillars':
+                    geometries = createPillars(50);
+                    break;
+            }
+
+            // 创建独立网格 / Create individual meshes
+            const material = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.7,
+                metalness: 0.1
+            });
+
+            geometries.forEach(geom => {
+                const mesh = new THREE.Mesh(geom.clone(), material.clone());
+                scene.add(mesh);
+                individualMeshes.push(mesh);
+            });
+
+            // 创建合并网格 / Create merged mesh
+            // 注意：mergeGeometries 需要所有几何体有相同的属性
+            // Note: mergeGeometries requires all geometries to have same attributes
+            const mergedGeometry = mergeGeometries(geometries, false);
+            const mergedMaterial = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.7,
+                metalness: 0.1
+            });
+            mergedMesh = new THREE.Mesh(mergedGeometry, mergedMaterial);
+            mergedMesh.visible = false; // 默认隐藏 / Hidden by default
+            scene.add(mergedMesh);
+
+            // 记录 draw call 数据 / Record draw call data
+            renderer.render(scene, camera);
+            drawCallData.individual = renderer.info.render.calls;
+
+            // 临时切换到合并模式记录 / Temporarily switch to merged to record
+            individualMeshes.forEach(m => m.visible = false);
+            mergedMesh.visible = true;
+            renderer.render(scene, camera);
+            drawCallData.merged = renderer.info.render.calls;
+
+            // 恢复状态 / Restore state
+            if (currentMode === 'individual') {
+                individualMeshes.forEach(m => m.visible = true);
+                mergedMesh.visible = false;
+            }
+
+            updateUI();
+        }
+
+        function clearScene() {
+            individualMeshes.forEach(mesh => {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                mesh.material.dispose();
+            });
+            individualMeshes = [];
+
+            if (mergedMesh) {
+                scene.remove(mergedMesh);
+                mergedMesh.geometry.dispose();
+                mergedMesh.material.dispose();
+                mergedMesh = null;
+            }
+        }
+
+        // ============================================
+        // 模式切换 / Mode Switching
+        // ============================================
+
+        function switchMode(mode) {
+            currentMode = mode;
+
+            if (mode === 'individual') {
+                individualMeshes.forEach(m => m.visible = true);
+                if (mergedMesh) mergedMesh.visible = false;
+            } else {
+                individualMeshes.forEach(m => m.visible = false);
+                if (mergedMesh) mergedMesh.visible = true;
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('current-mode').textContent =
+                currentMode === 'individual' ? 'Individual (Many Draw Calls)' : 'Merged (Single Draw Call)';
+            document.getElementById('current-mode').className =
+                'metric-value ' + (currentMode === 'individual' ? 'bad' : 'good');
+
+            document.getElementById('btn-individual').classList.toggle('active', currentMode === 'individual');
+            document.getElementById('btn-merged').classList.toggle('active', currentMode === 'merged');
+
+            document.getElementById('dc-individual').textContent = drawCallData.individual;
+            document.getElementById('dc-merged').textContent = drawCallData.merged;
+            document.getElementById('objects').textContent =
+                currentMode === 'individual' ? individualMeshes.length : 1;
+        }
+
+        // ============================================
+        // UI 事件 / UI Events
+        // ============================================
+
+        document.getElementById('btn-individual').addEventListener('click', () => switchMode('individual'));
+        document.getElementById('btn-merged').addEventListener('click', () => switchMode('merged'));
+        document.getElementById('btn-floor').addEventListener('click', () => buildScene('floor'));
+        document.getElementById('btn-wall').addEventListener('click', () => buildScene('wall'));
+        document.getElementById('btn-pillars').addEventListener('click', () => buildScene('pillars'));
+
+        // ============================================
+        // 动画循环 / Animation Loop
+        // ============================================
+
+        const clock = new THREE.Clock();
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            controls.update();
+            renderer.render(scene, camera);
+
+            // FPS 和指标更新 / FPS and metrics update
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                const fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+                const fpsEl = document.getElementById('fps-display');
+                fpsEl.textContent = `FPS: ${fps}`;
+                fpsEl.style.color = fps >= 50 ? '#4caf50' : fps >= 30 ? '#ff9800' : '#f44336';
+                frameCount = 0;
+                lastFpsTime = now;
+
+                document.getElementById('draw-calls').textContent = renderer.info.render.calls;
+                document.getElementById('triangles').textContent =
+                    renderer.info.render.triangles.toLocaleString();
+                document.getElementById('geometries').textContent = renderer.info.memory.geometries;
+            }
+        }
+
+        // ============================================
+        // 响应式处理 / Responsive Handling
+        // ============================================
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 初始化 / Initialize
+        buildScene('floor');
+        animate();
+
+        console.log('%c几何体合并提示 / Merge Geometries Tips:', 'color: #9c27b0; font-weight: bold; font-size: 14px;');
+        console.log('1. 合并几何体可以显著减少 draw calls / Merging geometries significantly reduces draw calls');
+        console.log('2. 合并后的几何体失去独立变换能力 / Merged geometry loses individual transform capability');
+        console.log('3. 适用于静态物体（地板、墙壁等）/ Best for static objects (floors, walls, etc.)');
+        console.log('4. 使用 vertexColors 保持不同颜色 / Use vertexColors to maintain different colors');
+
+    </script>
+</body>
+</html>
