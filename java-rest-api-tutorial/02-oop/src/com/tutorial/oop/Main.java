@@ -29,13 +29,13 @@ public class Main {
         }
 
         // instanceof 模式匹配 (Java 16+)
-        System.out.println("\n===== 3. 类型检查与向下转型 =====");
+        // System.out.println("\n===== 3. 类型检查与向下转型 =====");
         for (Animal animal : animals) {
             if (animal instanceof Dog d) {
                 System.out.printf("  %s 是 %s 犬种%n", d.getName(), d.getBreed());
             } else if (animal instanceof Cat c) {
                 System.out.printf("  %s 是 %s猫%n", c.getName(),
-                        c instanceof Cat cc && true ? "可爱的" : "");
+                        c instanceof Cat  && true ? "可爱的" : "");
             }
         }
 

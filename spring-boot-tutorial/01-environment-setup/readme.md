@@ -161,8 +161,8 @@ Spring Initializr 是 Spring 官方提供的项目脚手架工具，可以快速
 | Language | Java |
 | Spring Boot | 3.2.x（选最新稳定版） |
 | Group | com.example |
-| Artifact | blog-api |
-| Name | blog-api |
+| Artifact | blog |
+| Name | blog |
 | Description | Personal Blog System API |
 | Package name | com.example.blog |
 | Packaging | Jar |
@@ -192,9 +192,9 @@ curl https://start.spring.io/starter.zip \
   -d javaVersion=17 \
   -d bootVersion=3.2.5 \
   -d groupId=com.example \
-  -d artifactId=blog-api \
+  -d artifactId=blog \
   -d packageName=com.example.blog \
-  -o blog-api.zip
+  -o blog.zip
 ```
 
 解压后即可使用。
@@ -206,7 +206,7 @@ curl https://start.spring.io/starter.zip \
 创建完成后，项目目录结构如下：
 
 ```
-blog-api/
+blog/
 ├── src/
 │   ├── main/
 │   │   ├── java/
@@ -265,9 +265,9 @@ Spring Initializr 生成的 `pom.xml` 已经包含了基本的依赖配置。我
 
     <!-- 项目坐标 -->
     <groupId>com.example</groupId>
-    <artifactId>blog-api</artifactId>
+    <artifactId>blog</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>blog-api</name>
+    <name>blog</name>
     <description>Personal Blog System API</description>
 
     <!-- Java 版本属性 -->
@@ -436,7 +436,7 @@ Spring Initializr 默认生成的是 `application.properties` 文件。在实际
 spring:
   application:
     # 应用名称，会在日志中显示，也用于服务注册发现
-    name: blog-api
+    name: blog
 
 # ============================================
 # 服务器配置
@@ -511,7 +511,7 @@ Maven 会自动编译代码、下载依赖、启动应用。首次运行可能�
 mvn clean package -DskipTests
 
 # 然后运行 JAR
-java -jar target/blog-api-0.0.1-SNAPSHOT.jar
+java -jar target/blog-0.0.1-SNAPSHOT.jar
 ```
 
 这种方式适用于生产环境部署。
