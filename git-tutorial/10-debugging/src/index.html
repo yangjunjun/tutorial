@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyPortfolio - 调试练习 / Debugging Exercise</title>
+    <link rel="stylesheet" href="../04-remote-repos/src/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <ul>
+                <li><a href="index.html">首页 Home</a></li>
+                <li><a href="about.html">关于 About</a></li>
+                <li><a href="contact.html">联系 Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section class="hero">
+            <h1>🐛 调试练习 / Debugging Exercise</h1>
+            <p>找出计算器中引入 bug 的那个提交</p>
+            <p>Find the commit that introduced the bug in the calculator</p>
+        </section>
+        <section class="projects">
+            <h2>在线计算器 / Online Calculator</h2>
+            <div class="calculator">
+                <div class="calc-display" id="display">0</div>
+                <div class="calc-buttons">
+                    <button onclick="calcInput('7')">7</button>
+                    <button onclick="calcInput('8')">8</button>
+                    <button onclick="calcInput('9')">9</button>
+                    <button onclick="calcInput('/')">÷</button>
+                    <button onclick="calcInput('4')">4</button>
+                    <button onclick="calcInput('5')">5</button>
+                    <button onclick="calcInput('6')">6</button>
+                    <button onclick="calcInput('*')">×</button>
+                    <button onclick="calcInput('1')">1</button>
+                    <button onclick="calcInput('2')">2</button>
+                    <button onclick="calcInput('3')">3</button>
+                    <button onclick="calcInput('-')">−</button>
+                    <button onclick="calcInput('0')">0</button>
+                    <button onclick="calcInput('.')">.</button>
+                    <button onclick="calcEquals()">=</button>
+                    <button onclick="calcInput('+')">+</button>
+                    <button onclick="calcClear()" style="grid-column: span 4;">清除 Clear</button>
+                </div>
+            </div>
+            <div class="debug-info">
+                <h3>调试提示 / Debugging Tips</h3>
+                <p>试试计算 2 + 3，结果是否正确？如果不是，说明 bug 存在！</p>
+                <p>Try calculating 2 + 3. Is the result correct? If not, there's a bug!</p>
+                <p>使用 <code>git bisect</code> 来找到引入 bug 的提交。</p>
+                <p>Use <code>git bisect</code> to find the commit that introduced the bug.</p>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2026 MyPortfolio. All rights reserved.</p>
+    </footer>
+    <script src="calculator.js"></script>
+</body>
+</html>

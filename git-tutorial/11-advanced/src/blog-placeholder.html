@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>博客 / Blog - MyPortfolio</title>
+    <link rel="stylesheet" href="../04-remote-repos/src/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <ul>
+                <li><a href="index.html">首页 Home</a></li>
+                <li><a href="about.html">关于 About</a></li>
+                <li><a href="contact.html">联系 Contact</a></li>
+                <li><a href="blog-placeholder.html">博客 Blog</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section class="about-section">
+            <h2>博客 / Blog</h2>
+            <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #ffc107; margin-top: 1rem;">
+                <h3>📦 子模块占位 / Submodule Placeholder</h3>
+                <p>
+                    在实际项目中，这个目录会是一个独立的 Git 子模块，指向一个博客仓库。
+                </p>
+                <p>
+                    In a real project, this directory would be a separate Git submodule pointing to a blog repository.
+                </p>
+                <h4>设置子模块的命令 / Command to set up submodule:</h4>
+                <pre style="background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 4px; overflow-x: auto; margin-top: 0.5rem;"><code>git submodule add https://github.com/xiaoming/my-blog.git blog
+git submodule update --init --recursive</code></pre>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <h3>示例博客文章 / Sample Blog Posts</h3>
+                <div class="project-grid" style="margin-top: 1rem;">
+                    <div class="project-card">
+                        <h3>Git 入门指南</h3>
+                        <p><small>2026-06-01</small></p>
+                        <p>从零开始学习 Git 版本控制的完整指南...</p>
+                    </div>
+                    <div class="project-card">
+                        <h3>前端性能优化</h3>
+                        <p><small>2026-06-15</small></p>
+                        <p>提升 Web 应用加载速度的实用技巧...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2026 MyPortfolio. All rights reserved.</p>
+    </footer>
+</body>
+</html>

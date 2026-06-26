@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyPortfolio - Cherry-pick & Stash 练习</title>
+    <link rel="stylesheet" href="../04-remote-repos/src/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <ul>
+                <li><a href="index.html">首页 Home</a></li>
+                <li><a href="about.html">关于 About</a></li>
+                <li><a href="contact.html">联系 Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section class="hero">
+            <h1>Cherry-pick & Stash 练习</h1>
+            <p>这个页面用于练习 cherry-pick 和 stash 操作</p>
+            <p>This page is for practicing cherry-pick and stash operations</p>
+        </section>
+        <section class="projects">
+            <h2>练习场景 / Exercise Scenarios</h2>
+            <div class="project-grid">
+                <div class="project-card">
+                    <h3>场景 1: Cherry-pick 热修复</h3>
+                    <p>在 main 分支修复了一个关键 bug，需要将该修复也应用到 release 分支。</p>
+                    <p>A critical bug was fixed on main. Apply that fix to the release branch too.</p>
+                </div>
+                <div class="project-card">
+                    <h3>场景 2: Stash 紧急切换</h3>
+                    <p>正在开发新功能，突然收到紧急 bug 报告。Stash 你的工作，切换分支修 bug，然后回来继续。</p>
+                    <p>Working on a feature when an urgent bug report arrives. Stash your work, switch branches to fix, then resume.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2026 MyPortfolio. All rights reserved.</p>
+    </footer>
+    <script src="app.js"></script>
+</body>
+</html>

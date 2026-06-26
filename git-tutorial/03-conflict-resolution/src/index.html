@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyPortfolio - 冲突演示 / Conflict Demo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <ul>
+                <li><a href="index.html">首页 Home</a></li>
+                <li><a href="about.html">关于 About</a></li>
+                <!--
+                ======= 冲突演示 / Conflict Demo =======
+
+                开发者 A 的修改 / Developer A's change:
+                <<<<<<< HEAD
+                <li><a href="gallery.html">作品集 Gallery</a></li>
+                =======
+                <li><a href="blog.html">博客 Blog</a></li>
+                >>>>>>> feature/blog
+
+                解决方案（保留两者）/ Resolution (keep both):
+                <li><a href="gallery.html">作品集 Gallery</a></li>
+                <li><a href="blog.html">博客 Blog</a></li>
+                =========================================
+                -->
+                <li><a href="gallery.html">作品集 Gallery</a></li>
+                <li><a href="blog.html">博客 Blog</a></li>
+                <li><a href="contact.html">联系 Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section class="hero">
+            <h1>冲突解决演示 / Conflict Resolution Demo</h1>
+            <p>这个页面展示了 Git 合并冲突的实际场景</p>
+            <p>This page demonstrates a real Git merge conflict scenario</p>
+        </section>
+        <section class="conflict-explanation">
+            <h2>冲突场景 / Conflict Scenario</h2>
+            <p>
+                假设开发者 A 在 <code>feature/gallery</code> 分支添加了"作品集"链接，
+                同时开发者 B 在 <code>feature/blog</code> 分支添加了"博客"链接。
+                两人都修改了导航栏的同一区域，合并时产生冲突。
+            </p>
+            <p>
+                Suppose Developer A added a "Gallery" link on the <code>feature/gallery</code> branch,
+                while Developer B added a "Blog" link on the <code>feature/blog</code> branch.
+                Both modified the same area of the navbar, causing a merge conflict.
+            </p>
+            <h3>解决步骤 / Resolution Steps</h3>
+            <ol>
+                <li>打开冲突文件，找到冲突标记 / Open the conflicted file and find conflict markers</li>
+                <li>决定保留哪些修改 / Decide which changes to keep</li>
+                <li>删除冲突标记 / Remove conflict markers</li>
+                <li><code>git add</code> 标记为已解决 / Stage to mark as resolved</li>
+                <li><code>git commit</code> 完成合并 / Commit to complete the merge</li>
+            </ol>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2026 MyPortfolio. All rights reserved.</p>
+    </footer>
+</body>
+</html>
