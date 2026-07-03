@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "title": "学习 VS Code 调试面板",
+    "priority": "high",
+    "completed": true,
+    "createdAt": "2025-01-15T08:00:00.000Z",
+    "completedAt": "2026-07-03T12:01:43.075Z"
+  },
+  {
+    "id": 2,
+    "title": "配置 launch.json 文件",
+    "priority": "high",
+    "completed": false,
+    "createdAt": "2025-01-15T08:30:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": 3,
+    "title": "练习条件断点的使用",
+    "priority": "medium",
+    "completed": false,
+    "createdAt": "2025-01-15T09:00:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": 4,
+    "title": "使用 Logpoint 追踪代码执行",
+    "priority": "medium",
+    "completed": true,
+    "createdAt": "2025-01-15T09:30:00.000Z",
+    "completedAt": "2025-01-15T10:00:00.000Z"
+  },
+  {
+    "id": 5,
+    "title": "掌握 Watch 和 Debug Console",
+    "priority": "low",
+    "completed": false,
+    "createdAt": "2025-01-15T10:00:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": 6,
+    "title": "完成调试教程",
+    "priority": "medium",
+    "completed": false,
+    "createdAt": "2026-07-03T12:11:43.802Z",
+    "completedAt": null
+  }
+]

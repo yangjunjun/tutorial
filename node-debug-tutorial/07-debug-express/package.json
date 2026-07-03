@@ -1,0 +1,17 @@
+{
+  "name": "07-debug-express",
+  "version": "1.0.0",
+  "description": "Express.js 调试教程 - REST API 示例项目",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --inspect app.js",
+    "debug": "node --inspect-brk app.js",
+    "debug:watch": "node --watch --inspect app.js"
+  },
+  "keywords": ["express", "debug", "tutorial"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

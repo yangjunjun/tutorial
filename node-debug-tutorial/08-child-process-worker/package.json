@@ -1,0 +1,16 @@
+{
+  "name": "08-child-process-worker",
+  "version": "1.0.0",
+  "description": "Node.js 多进程与 Worker Threads 调试教程",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --inspect app.js",
+    "debug": "node --inspect-brk app.js",
+    "debug:child": "node --inspect --inspect-port=9230 app.js",
+    "worker": "node worker-compute.js",
+    "pool": "node worker-pool.js"
+  },
+  "keywords": ["child_process", "worker_threads", "debug", "ipc", "tutorial"],
+  "license": "MIT"
+}
