@@ -1,0 +1,54 @@
+---
+title: "你好，MDX！"
+date: 2024-01-15
+author: "张三"
+tags: ["mdx", "astro", "教程"]
+---
+
+import Callout from '../../components/Callout.astro';
+
+# 你好，MDX！
+
+欢迎来到 MDX 的世界！这篇文章展示了 MDX 的强大功能。
+
+## 什么是 MDX？
+
+MDX 是 **Markdown** 和 **JSX** 的结合体。它让你：
+
+- 像写 Markdown 一样写内容
+- 像写 React 一样嵌入组件
+- 使用 JavaScript 表达式
+
+### JSX 表达式示例
+
+下面是一个内联计算：
+
+> 2 + 3 = {2 + 3}，当前年份是 {new Date().getFullYear()}。
+
+<Callout type="info" title="关于 MDX">
+  MDX 文件既可以包含标准 Markdown 语法，也可以包含 JSX 组件。
+  这让内容创作变得极其灵活。
+</Callout>
+
+## 代码示例
+
+以下是一个简单的 Astro 组件：
+
+```astro
+---
+const title = "Hello Astro";
+---
+
+<h1>{title}</h1>
+<p>这是一个 Astro 组件示例。</p>
+```
+
+<Callout type="tip">
+  使用 Content Collections 可以为 frontmatter 提供类型检查，
+  避免拼写错误和类型不匹配。
+</Callout>
+
+## 总结
+
+MDX 为静态站点带来了**组件化内容**的能力。结合 Astro 的 Content Collections，
+你可以构建出既灵活又类型安全的文档系统。

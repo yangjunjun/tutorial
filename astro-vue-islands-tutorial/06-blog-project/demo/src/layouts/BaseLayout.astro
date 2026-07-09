@@ -1,0 +1,418 @@
+---
+/**
+ * 基础布局组件
+ *
+ * 提供所有页面共享的 HTML 结构、导航栏、页脚和全局样式。
+ * 包含 SEO 优化（Open Graph、Twitter Card）和暗黑模式支持。
+ */
+import DarkModeToggle from '../components/vue/DarkModeToggle.vue';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'Astro + Vue 3 Islands 技术博客' } = Astro.props;
+
+// 当前路径，用于导航高亮
+const currentPath = Astro.url.pathname;
+
+// 导航链接
+const navLinks = [
+  { href: '/', label: '首页' },
+  { href: '/blog', label: '博客' },
+  { href: '/tags', label: '标签' },
+  { href: '/search', label: '搜索' },
+  { href: '/about', label: '关于' },
+];
+---
+
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- SEO -->
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <!-- RSS 自动发现 -->
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title="Astro Vue Islands 博客 RSS"
+      href="/rss.xml"
+    />
+
+    <!-- 暗黑模式初始化脚本 — 防止闪烁 -->
+    <script is:inline>
+      (function() {
+        const theme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- 导航栏 -->
+    <header class="site-header">
+      <nav class="nav-container">
+        <a href="/" class="nav-logo">
+          <span class="logo-icon">A</span>
+          <span class="logo-text">Astro 博客</span>
+        </a>
+
+        <div class="nav-links">
+          {navLinks.map(link => (
+            <a
+              href={link.href}
+              class:list={['nav-link', { active: currentPath === link.href || (link.href !== '/' && currentPath.startsWith(link.href)) }]}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+
+        <div class="nav-actions">
+          <!-- 暗黑模式切换 — Vue Island -->
+          <DarkModeToggle client:load />
+
+          <!-- 移动端菜单按钮 -->
+          <button class="mobile-menu-btn" aria-label="打开菜单">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- 页面内容 -->
+    <main class="site-main">
+      <div class="content-container">
+        <slot />
+      </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="site-footer">
+      <div class="footer-container">
+        <div class="footer-section">
+          <h3>Astro Vue Islands 博客</h3>
+          <p>使用 Astro + Vue 3 + MDX 构建的现代技术博客</p>
+        </div>
+
+        <div class="footer-section">
+          <h4>链接</h4>
+          <ul>
+            <li><a href="/blog">博客文章</a></li>
+            <li><a href="/tags">标签</a></li>
+            <li><a href="/about">关于</a></li>
+            <li><a href="/rss.xml">RSS 订阅</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-section">
+          <h4>社交</h4>
+          <ul>
+            <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://twitter.com" target="_blank" rel="noopener">Twitter / X</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-bottom">
+          <p>© 2024 Astro Vue Islands 博客. 使用 Astro 构建.</p>
+        </div>
+      </div>
+    </footer>
+
+    <!-- 移动端菜单脚本 -->
+    <script is:inline>
+      const menuBtn = document.querySelector('.mobile-menu-btn');
+      const navLinks = document.querySelector('.nav-links');
+      if (menuBtn && navLinks) {
+        menuBtn.addEventListener('click', () => {
+          navLinks.classList.toggle('open');
+          menuBtn.classList.toggle('active');
+        });
+      }
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  /* ===== CSS 变量 — 主题系统 ===== */
+  :root,
+  [data-theme='light'] {
+    --color-bg: #ffffff;
+    --color-text: #1a1a2e;
+    --color-text-muted: #64748b;
+    --color-primary: #6366f1;
+    --color-primary-light: #eef2ff;
+    --color-border: #e2e8f0;
+    --color-card-bg: #f8fafc;
+    --color-code-bg: #1e293b;
+    --color-inline-code-bg: #f1f5f9;
+    --color-header-bg: rgba(255, 255, 255, 0.85);
+    --color-footer-bg: #f8fafc;
+    --color-shadow: rgba(0, 0, 0, 0.08);
+  }
+
+  [data-theme='dark'] {
+    --color-bg: #0f172a;
+    --color-text: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-primary: #818cf8;
+    --color-primary-light: #1e1b4b;
+    --color-border: #334155;
+    --color-card-bg: #1e293b;
+    --color-code-bg: #0d1117;
+    --color-inline-code-bg: #1e293b;
+    --color-header-bg: rgba(15, 23, 42, 0.85);
+    --color-footer-bg: #1e293b;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+  }
+
+  /* 全局重置 */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+    transition: background-color 0.3s, color 0.3s;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+</style>
+
+<style>
+  /* ===== 导航栏 ===== */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--color-header-bg);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: var(--color-text);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .nav-link {
+    padding: 0.5rem 0.9rem;
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .nav-link:hover,
+  .nav-link.active {
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* 移动端菜单按钮 */
+  .mobile-menu-btn {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .mobile-menu-btn span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--color-text);
+    border-radius: 1px;
+    transition: transform 0.3s;
+  }
+
+  .mobile-menu-btn.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+  }
+  .mobile-menu-btn.active span:nth-child(2) {
+    opacity: 0;
+  }
+  .mobile-menu-btn.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+  }
+
+  /* ===== 主内容区 ===== */
+  .site-main {
+    flex: 1;
+    padding: 2rem 0;
+  }
+
+  .content-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ===== 页脚 ===== */
+  .site-footer {
+    background: var(--color-footer-bg);
+    border-top: 1px solid var(--color-border);
+    padding: 3rem 0 1.5rem;
+    margin-top: auto;
+  }
+
+  .footer-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .footer-section h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .footer-section h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .footer-section p {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .footer-section ul {
+    list-style: none;
+  }
+
+  .footer-section ul li {
+    margin-bottom: 0.4rem;
+  }
+
+  .footer-section ul a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+  }
+
+  .footer-section ul a:hover {
+    color: var(--color-primary);
+  }
+
+  .footer-bottom {
+    grid-column: 1 / -1;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    text-align: center;
+  }
+
+  .footer-bottom p {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+  }
+
+  /* ===== 响应式 ===== */
+  @media (max-width: 768px) {
+    .nav-links {
+      display: none;
+      position: absolute;
+      top: 64px;
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      padding: 1rem;
+    }
+
+    .nav-links.open {
+      display: flex;
+    }
+
+    .mobile-menu-btn {
+      display: flex;
+    }
+
+    .footer-container {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

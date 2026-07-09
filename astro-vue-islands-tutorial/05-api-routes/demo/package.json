@@ -1,0 +1,16 @@
+{
+  "name": "05-api-routes",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^4.16.0",
+    "@astrojs/vue": "^4.5.0",
+    "@astrojs/node": "^8.3.0",
+    "vue": "^3.5.0"
+  }
+}

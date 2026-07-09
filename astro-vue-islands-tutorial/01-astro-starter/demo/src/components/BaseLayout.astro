@@ -1,0 +1,131 @@
+---
+// src/components/BaseLayout.astro — 全局布局组件
+// 提供页面的公共结构：HTML 外壳、导航栏、页脚、全局样式
+// 使用方式：<BaseLayout title="页面标题">页面内容</BaseLayout>
+
+// 定义 Props 类型
+interface Props {
+  title?: string;
+}
+
+// 从 Astro.props 获取属性，提供默认值
+const { title = "Astro Demo" } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Astro + MDX + Vue 3 Islands 教程示例项目" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <!-- 全局导航栏 -->
+    <nav class="navbar">
+      <div class="container nav-content">
+        <a href="/" class="logo">🌟 Astro Demo</a>
+        <div class="nav-links">
+          <a href="/">首页</a>
+          <a href="/about">关于</a>
+          <a href="/blog">博客</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+      <div class="container">
+        <!-- slot：页面内容会被插入到这里 -->
+        <slot />
+      </div>
+    </main>
+
+    <!-- 全局页脚 -->
+    <footer class="footer">
+      <div class="container">
+        <p>Astro + MDX + Vue 3 Islands 教程 &copy; 2024</p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<!-- 全局样式（is:global 使样式作用于整个页面） -->
+<style is:global>
+  /* 基础重置 */
+  *,
+  *::before,
+  *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  /* 全局排版 */
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background: #fafafa;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 容器 */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* 导航栏 */
+  .navbar {
+    background-color: #1a1a2e;
+    padding: 14px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .nav-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .logo {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+
+  .nav-links a {
+    color: #ccc;
+    text-decoration: none;
+    margin-left: 24px;
+    font-size: 0.95rem;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: #ff6b6b;
+  }
+
+  /* 主内容区域 */
+  .main-content {
+    flex: 1;
+  }
+
+  /* 页脚 */
+  .footer {
+    background: #1a1a2e;
+    color: #888;
+    text-align: center;
+    padding: 20px 0;
+    font-size: 0.85rem;
+    margin-top: auto;
+  }
+</style>

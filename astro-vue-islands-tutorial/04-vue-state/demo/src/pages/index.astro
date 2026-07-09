@@ -1,0 +1,203 @@
+---
+/**
+ * 主页面 - 演示 Nano Stores 跨岛屿共享状态
+ *
+ * 页面结构：
+ * - Header：主题切换 + 购物车角标
+ * - 商品网格：每个商品卡片是独立的 Vue 岛屿
+ * - 购物车侧边栏：另一个 Vue 岛屿
+ *
+ * ProductCard 和 CartSidebar 共享同一个 cart store，
+ * 点击"加入购物车"后侧边栏自动更新！
+ */
+import ProductCard from '../components/vue/ProductCard.vue';
+import CartSidebar from '../components/vue/CartSidebar.vue';
+import ThemeSwitcher from '../components/vue/ThemeSwitcher.vue';
+import CartBadge from '../components/vue/CartBadge.vue';
+
+// 模拟商品数据
+const products = [
+  { id: '1', name: '机械键盘', price: 599, image: '⌨️' },
+  { id: '2', name: '无线鼠标', price: 199, image: '🖱️' },
+  { id: '3', name: '降噪耳机', price: 899, image: '🎧' },
+  { id: '4', name: '显示器', price: 2499, image: '🖥️' },
+  { id: '5', name: '摄像头', price: 349, image: '📷' },
+  { id: '6', name: '桌面台灯', price: 259, image: '💡' },
+];
+---
+
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>第四章 - 状态管理 Demo</title>
+  <style>
+    /* ── 基础样式和主题变量 ── */
+    :root {
+      --bg: #f8f9fa;
+      --bg-card: #ffffff;
+      --text: #1a1a2e;
+      --text-secondary: #6c757d;
+      --primary: #4361ee;
+      --primary-hover: #3a56d4;
+      --border: #e9ecef;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --radius: 12px;
+    }
+
+    .dark {
+      --bg: #1a1a2e;
+      --bg-card: #16213e;
+      --text: #e8e8e8;
+      --text-secondary: #a0a0b0;
+      --primary: #4cc9f0;
+      --primary-hover: #3ab8df;
+      --border: #2a2a4a;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* 平滑主题过渡 */
+    * {
+      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 32px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* ── 主内容区 ── */
+    .main {
+      display: flex;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      gap: 32px;
+    }
+
+    .content {
+      flex: 1;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      margin: 0 0 20px;
+    }
+
+    /* ── 商品网格 ── */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    /* ── 侧边栏 ── */
+    .sidebar {
+      width: 320px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-sticky {
+      position: sticky;
+      top: 88px;
+    }
+
+    /* ── 链接 ── */
+    .nav-links {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .nav-links a {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .nav-links a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── 响应式 ── */
+    @media (max-width: 768px) {
+      .main {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header：主题切换 + 购物车角标 -->
+  <header class="header">
+    <div>
+      <h1>🏪 Astro 商店</h1>
+      <nav class="nav-links">
+        <a href="/">首页</a>
+        <a href="/events">事件通信 Demo</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <!-- 购物车角标：订阅 cartCount store -->
+      <CartBadge client:load />
+      <!-- 主题切换器 -->
+      <ThemeSwitcher client:load />
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- 商品列表区域 -->
+    <section class="content">
+      <h2 class="section-title">商品列表</h2>
+      <div class="product-grid">
+        {products.map((product) => (
+          <ProductCard
+            client:load
+            id={product.id}
+            name={product.name}
+            price={product.price}
+            image={product.image}
+          />
+        ))}
+      </div>
+    </section>
+
+    <!-- 购物车侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-sticky">
+        <CartSidebar client:load />
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

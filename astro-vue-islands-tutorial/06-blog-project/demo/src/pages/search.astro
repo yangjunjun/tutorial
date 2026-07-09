@@ -1,0 +1,65 @@
+---
+/**
+ * 搜索页 — 使用 Vue Island 实现客户端即时搜索
+ *
+ * 所有文章数据在构建时注入到页面，搜索完全在客户端执行
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SearchWidget from '../components/vue/SearchWidget.vue';
+import { getCollection } from 'astro:content';
+
+// 获取所有文章数据（仅提取搜索所需的字段）
+const allPosts = await getCollection('posts', ({ data }) => data.draft !== true);
+
+// 构建搜索数据 — 精简为搜索所需的字段
+const searchData = allPosts.map(post => ({
+  title: post.data.title,
+  description: post.data.description,
+  tags: post.data.tags,
+  category: post.data.category,
+  slug: post.slug,
+  // 截取文章正文前 200 字符作为搜索摘要
+  excerpt: (post.body || '').replace(/[#*`>\-[\]()]/g, '').slice(0, 200).trim(),
+}));
+---
+
+<BaseLayout title="搜索 - Astro Vue Islands 博客" description="搜索博客中的所有文章">
+  <div class="search-page">
+    <h1>搜索文章</h1>
+    <p class="search-hint">
+      输入关键词搜索所有文章的标题、描述和标签。按 <kbd>Ctrl</kbd> + <kbd>K</kbd> 可快速聚焦搜索框。
+    </p>
+
+    <!-- Vue Island: 搜索组件 — 需要立即响应用户输入，使用 client:load -->
+    <SearchWidget client:load posts={searchData} />
+  </div>
+</BaseLayout>
+
+<style>
+  .search-page {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .search-page h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .search-hint {
+    color: var(--color-text-muted, #64748b);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+  }
+
+  .search-hint kbd {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    background: var(--color-card-bg, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85em;
+    box-shadow: 0 1px 0 var(--color-border, #e2e8f0);
+  }
+</style>

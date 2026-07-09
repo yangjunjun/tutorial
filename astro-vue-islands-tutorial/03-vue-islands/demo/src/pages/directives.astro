@@ -1,0 +1,354 @@
+---
+/**
+ * 指令详解页 —— 每种 client 指令的深入演示
+ *
+ * 每个 section 展示一种指令，包含：
+ * - 指令说明
+ * - 实时演示
+ * - 源码示例
+ * - HTML 输出差异
+ */
+
+import Counter from '../components/vue/Counter.vue';
+import TodoList from '../components/vue/TodoList.vue';
+import ThemeToggle from '../components/vue/ThemeToggle.vue';
+import Accordion from '../components/vue/Accordion.vue';
+import Clock from '../components/vue/Clock.vue';
+
+const accordionItems = [
+  {
+    title: 'client:load 的原理',
+    content: '页面 HTML 加载完成后，Astro 会立即注入 Vue 运行时并对该组件执行 hydration。组件的 SSR HTML 在用户看到之前就已渲染，hydration 后组件变为可交互状态。',
+  },
+  {
+    title: 'client:idle 的原理',
+    content: '使用 requestIdleCallback（或 setTimeout 作为 polyfill）在浏览器完成主要渲染任务后再执行 hydration。这意味着组件在首屏可能短暂不可交互。',
+  },
+  {
+    title: 'client:visible 的原理',
+    content: '使用 IntersectionObserver 监听组件是否进入视口。只有当用户滚动到组件位置时，才会加载 JS 并执行 hydration。',
+  },
+  {
+    title: 'client:only 的原理',
+    content: '服务端完全不渲染该组件的 HTML（输出为空占位符），仅在客户端执行完整的 Vue 渲染。适用于无法 SSR 的组件。',
+  },
+];
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Client 指令详解 | Vue 3 Islands</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.8;
+      color: #1a1a2e;
+      background: #f8f9fa;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      margin-bottom: 3rem;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      color: #6366f1;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      color: #64748b;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 1.5rem;
+      color: #6366f1;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    /* 指令章节 */
+    .directive-section {
+      margin-bottom: 3.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .directive-section:last-of-type {
+      border-bottom: none;
+    }
+
+    .directive-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .directive-header h2 {
+      font-size: 1.4rem;
+      color: #0f172a;
+    }
+
+    .timing-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .timing-immediate { background: #fee2e2; color: #dc2626; }
+    .timing-idle { background: #fef3c7; color: #d97706; }
+    .timing-visible { background: #d1fae5; color: #059669; }
+    .timing-only { background: #e0e7ff; color: #4338ca; }
+
+    .directive-desc {
+      color: #475569;
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .demo-wrapper {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .demo-wrapper h4 {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+
+    /* 代码块 */
+    .code-block {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+
+    .code-block .comment {
+      color: #64748b;
+    }
+
+    .code-block .tag {
+      color: #f472b6;
+    }
+
+    .code-block .attr {
+      color: #a78bfa;
+    }
+
+    .code-block .string {
+      color: #34d399;
+    }
+
+    /* HTML 输出说明 */
+    .output-note {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: #92400e;
+    }
+
+    .output-note strong {
+      display: block;
+      margin-bottom: 0.3rem;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      border-top: 1px solid #e2e8f0;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">&larr; 返回首页</a>
+
+    <header>
+      <h1>Client 指令详解</h1>
+      <p>深入理解每种指令的水合时机、HTML 输出与适用场景</p>
+    </header>
+
+    <!-- 1. client:load -->
+    <section class="directive-section">
+      <div class="directive-header">
+        <h2>client:load</h2>
+        <span class="timing-badge timing-immediate">立即水合</span>
+      </div>
+      <p class="directive-desc">
+        页面加载完成后立即执行 hydration。组件的 SSR HTML 已在服务端渲染，
+        JS 加载后 Vue 接管事件绑定和响应式状态。
+      </p>
+
+      <div class="demo-wrapper">
+        <h4>实时演示</h4>
+        <Counter client:load initialCount={5} />
+      </div>
+
+      <div class="code-block">
+        <span class="comment">&lt;!-- Astro 模板中的写法 --&gt;</span><br />
+        <span class="tag">&lt;Counter</span> <span class="attr">client:load</span> <span class="attr">initialCount</span>=<span class="string">{5}</span> <span class="tag">/&gt;</span>
+      </div>
+
+      <div class="output-note">
+        <strong>HTML 输出：</strong>
+        服务端输出完整的按钮和数字 HTML。客户端 JS 加载后，Vue 接管 click 事件。
+        用户在 JS 加载前就能看到界面，但按钮暂时不可点击。
+      </div>
+    </section>
+
+    <!-- 2. client:idle -->
+    <section class="directive-section">
+      <div class="directive-header">
+        <h2>client:idle</h2>
+        <span class="timing-badge timing-idle">空闲时水合</span>
+      </div>
+      <p class="directive-desc">
+        使用 <code>requestIdleCallback</code> 在浏览器空闲时水合。
+        适合非关键交互——主题切换、通知偏好等。
+      </p>
+
+      <div class="demo-wrapper">
+        <h4>实时演示</h4>
+        <ThemeToggle client:idle />
+      </div>
+
+      <div class="code-block">
+        <span class="tag">&lt;ThemeToggle</span> <span class="attr">client:idle</span> <span class="tag">/&gt;</span>
+      </div>
+
+      <div class="output-note">
+        <strong>HTML 输出：</strong>
+        与 client:load 类似，服务端输出完整 HTML。但 JS 注入被推迟到浏览器空闲时。
+        如果页面渲染任务繁忙，水合可能延迟数百毫秒。
+      </div>
+    </section>
+
+    <!-- 3. client:visible -->
+    <section class="directive-section">
+      <div class="directive-header">
+        <h2>client:visible</h2>
+        <span class="timing-badge timing-visible">可见时水合</span>
+      </div>
+      <p class="directive-desc">
+        使用 <code>IntersectionObserver</code> 监听组件是否进入视口。
+        只有滚动到组件位置时，才会加载 JS 并水合。
+      </p>
+
+      <div class="demo-wrapper">
+        <h4>实时演示</h4>
+        <Accordion client:visible items={accordionItems} />
+      </div>
+
+      <div class="code-block">
+        <span class="tag">&lt;Accordion</span> <span class="attr">client:visible</span> <span class="attr">:items</span>=<span class="string">{accordionItems}</span> <span class="tag">/&gt;</span>
+      </div>
+
+      <div class="output-note">
+        <strong>HTML 输出：</strong>
+        服务端输出折叠面板的静态 HTML（全部折叠状态）。
+        如果用户从未滚动到此处，JS 永远不会加载——实现零成本懒加载。
+      </div>
+    </section>
+
+    <!-- 4. client:only -->
+    <section class="directive-section">
+      <div class="directive-header">
+        <h2>client:only="vue"</h2>
+        <span class="timing-badge timing-only">仅客户端</span>
+      </div>
+      <p class="directive-desc">
+        完全跳过 SSR。服务端输出一个空的占位 <code>&lt;astro-island&gt;</code> 元素，
+        客户端加载 JS 后由 Vue 完整渲染。适合依赖 <code>setInterval</code>、
+        <code>localStorage</code> 等浏览器 API 的组件。
+      </p>
+
+      <div class="demo-wrapper">
+        <h4>实时演示</h4>
+        <Clock client:only="vue" />
+      </div>
+
+      <div class="code-block">
+        <span class="tag">&lt;Clock</span> <span class="attr">client:only</span>=<span class="string">"vue"</span> <span class="tag">/&gt;</span><br /><br />
+        <span class="comment">&lt;!-- 必须指定框架名，Astro 需要知道用哪个渲染器 --&gt;</span>
+      </div>
+
+      <div class="output-note">
+        <strong>HTML 输出：</strong>
+        服务端输出 <code>&lt;astro-island uid="..." component-url="..."&gt;&lt;/astro-island&gt;</code>，
+        内容为空。客户端 JS 加载后，Vue 接管并渲染完整组件。
+        这意味着在 JS 加载前，该区域是完全空白的。
+      </div>
+    </section>
+
+    <!-- 5. client:media 说明 -->
+    <section class="directive-section">
+      <div class="directive-header">
+        <h2>client:media</h2>
+        <span class="timing-badge" style="background: #f3e8ff; color: #7c3aed;">响应式水合</span>
+      </div>
+      <p class="directive-desc">
+        使用 <code>window.matchMedia()</code> 监听 CSS 媒体查询。
+        只有当条件满足时才加载 JS 并水合。非常适合"仅移动端"或"仅桌面端"的组件。
+      </p>
+
+      <div class="code-block">
+        <span class="comment">&lt;!-- 只在移动端加载 --&gt;</span><br />
+        <span class="tag">&lt;MobileMenu</span> <span class="attr">client:media</span>=<span class="string">"(max-width: 768px)"</span> <span class="tag">/&gt;</span><br /><br />
+        <span class="comment">&lt;!-- 只在大屏加载 --&gt;</span><br />
+        <span class="tag">&lt;DesktopSidebar</span> <span class="attr">client:media</span>=<span class="string">"(min-width: 1024px)"</span> <span class="tag">/&gt;</span>
+      </div>
+
+      <div class="output-note">
+        <strong>HTML 输出：</strong>
+        服务端输出组件的 SSR HTML（始终渲染），但 JS 只在媒体查询匹配时加载。
+        桌面用户访问时，移动端组件的 JS 不会加载——节省带宽。
+      </div>
+    </section>
+
+    <footer>
+      <p>Astro + Vue 3 Islands 教程 &mdash; 指令详解</p>
+    </footer>
+  </div>
+</body>
+</html>

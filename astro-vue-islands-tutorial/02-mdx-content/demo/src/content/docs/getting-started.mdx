@@ -1,0 +1,56 @@
+---
+title: "快速开始"
+description: "从零开始搭建你的第一个 Astro + MDX 项目"
+category: "guide"
+order: 1
+---
+
+# 快速开始
+
+本指南将带你从零搭建一个 Astro + MDX 项目。
+
+## 前置条件
+
+- Node.js 18+ 
+- 你喜欢的代码编辑器（推荐 VS Code + Astro 插件）
+
+## 创建项目
+
+使用 Astro 官方 CLI 快速创建：
+
+```bash
+npm create astro@latest
+```
+
+选择"Empty"模板，然后安装 MDX 集成：
+
+```bash
+npx astro add mdx
+```
+
+## 项目结构
+
+```
+my-project/
+├── src/
+│   ├── content/       # 内容集合（Markdown / MDX 文件）
+│   ├── components/    # Astro / Vue / React 组件
+│   ├── layouts/       # 布局组件
+│   └── pages/         # 页面路由
+├── astro.config.mjs   # Astro 配置
+├── tsconfig.json      # TypeScript 配置
+└── package.json
+```
+
+## 运行开发服务器
+
+```bash
+npm run dev
+```
+
+默认情况下，项目运行在 `http://localhost:4321`。
+
+## 下一步
+
+- 阅读「Content Collections」了解如何组织内容
+- 学习 MDX 语法，在文档中嵌入组件

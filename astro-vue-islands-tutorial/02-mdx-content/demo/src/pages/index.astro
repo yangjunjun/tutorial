@@ -1,0 +1,229 @@
+---
+import { getCollection } from 'astro:content';
+
+// 获取所有已发布的文章（过滤掉草稿）
+const articles = await getCollection('articles', ({ data }) => {
+  return data.draft !== true;
+});
+
+// 获取所有文档，按 order 排序
+const docs = await getCollection('docs');
+const sortedDocs = docs.sort((a, b) => a.data.order - b.data.order);
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astro MDX 内容管理</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #1a1a2e;
+      background: #f8f9fa;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding: 2rem 0;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      color: #16213e;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      font-size: 1.1rem;
+      color: #64748b;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    /* 文章卡片区域 */
+    .articles-section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: #0f172a;
+    }
+
+    .articles-grid {
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .article-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #e2e8f0;
+      transition: border-color 0.2s;
+    }
+
+    .article-card:hover {
+      border-color: #6366f1;
+    }
+
+    .article-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .article-card h3 a {
+      color: #1e293b;
+      text-decoration: none;
+    }
+
+    .article-card h3 a:hover {
+      color: #6366f1;
+    }
+
+    .article-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.875rem;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+
+    .article-tags {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      background: #e0e7ff;
+      color: #4338ca;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    /* 文档侧边栏 */
+    .docs-sidebar {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #e2e8f0;
+      position: sticky;
+      top: 2rem;
+    }
+
+    .docs-sidebar h2 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      color: #0f172a;
+    }
+
+    .docs-list {
+      list-style: none;
+    }
+
+    .docs-list li {
+      margin-bottom: 0.5rem;
+    }
+
+    .docs-list a {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      color: #475569;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+
+    .docs-list a:hover {
+      background: #f1f5f9;
+      color: #6366f1;
+    }
+
+    .docs-list .doc-order {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      margin-right: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Astro + MDX 内容管理</h1>
+      <p>Content Collections + MDX = 类型安全的内容系统</p>
+    </header>
+
+    <div class="layout">
+      <!-- 文章列表 -->
+      <section class="articles-section">
+        <h2>文章 ({articles.length})</h2>
+        <div class="articles-grid">
+          {articles.map((article) => (
+            <div class="article-card">
+              <div class="article-meta">
+                <span>{article.data.date.toLocaleDateString('zh-CN')}</span>
+                <span>by {article.data.author}</span>
+              </div>
+              <h3>
+                <a href={`/articles/${article.slug}`}>
+                  {article.data.title}
+                </a>
+              </h3>
+              <div class="article-tags">
+                {article.data.tags.map((tag: string) => (
+                  <span class="tag">{tag}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <!-- 文档侧边栏 -->
+      <aside class="docs-sidebar">
+        <h2>文档</h2>
+        <ul class="docs-list">
+          {sortedDocs.map((doc) => (
+            <li>
+              <a href={`/docs/${doc.slug}`}>
+                <span class="doc-order">{doc.data.order}.</span>
+                {doc.data.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,281 @@
+---
+title: "Astro 站点性能优化：从 Lighthouse 60 分到 100 分"
+date: 2024-12-29
+author: "王五"
+description: "系统化的 Astro 站点性能优化指南，涵盖 Core Web Vitals 提升、资源加载优化、图片处理和缓存策略。"
+tags: ["performance", "astro", "optimization"]
+category: "深度"
+---
+
+# Astro 站点性能优化
+
+性能不是锦上添花，而是网站成功的基石。在这篇文章中，我们将从多个维度优化 Astro 站点，目标是 Lighthouse 全绿。
+
+## 性能指标概览
+
+在开始优化之前，我们需要了解关键的性能指标：
+
+| 指标 | 含义 | 目标值 |
+|------|------|--------|
+| LCP | 最大内容绘制 | < 2.5s |
+| FID | 首次输入延迟 | < 100ms |
+| CLS | 累计布局偏移 | < 0.1 |
+| TTFB | 首字节时间 | < 800ms |
+| FCP | 首次内容绘制 | < 1.8s |
+
+## 1. 构建优化
+
+### 最小化 JavaScript
+
+Astro 默认不输出 JS，但 Islands 组件会引入框架运行时。优化策略：
+
+```astro
+<!-- 不好的做法：所有组件都用 client:load -->
+<Header client:load />
+<Sidebar client:load />
+<Footer client:load />
+
+<!-- 好的做法：根据需要使用不同的加载策略 -->
+<Header />                    <!-- 纯静态 -->
+<SearchWidget client:load />  <!-- 需要立即交互 -->
+<TableOfContents client:idle /> <!-- 空闲时加载 -->
+<Comments client:visible />   <!-- 滚动到才加载 -->
+```
+
+### 代码分割
+
+确保每个页面只加载需要的组件：
+
+```typescript
+// astro.config.mjs
+export default defineConfig({
+  // 启用更激进的代码分割
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vue: ['vue'],
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+## 2. 图片优化
+
+### 使用 astro:assets
+
+```astro
+---
+import { Image } from 'astro:assets';
+import heroImage from '../assets/hero.jpg';
+---
+
+<!-- 自动 WebP/AVIF 转换、响应式尺寸、懒加载 -->
+<Image
+  src={heroImage}
+  alt="英雄图片"
+  width={800}
+  height={400}
+  format="avif"
+  quality={80}
+/>
+```
+
+### 图片懒加载
+
+```astro
+<!-- 首屏图片：立即加载 -->
+<Image src={hero} alt="Hero" loading="eager" />
+
+<!-- 非首屏图片：懒加载 -->
+<Image src={gallery1} alt="Gallery" loading="lazy" />
+```
+
+### 图片性能对比
+
+| 方案 | 文件大小 | 加载时间 |
+|------|---------|---------|
+| 原始 JPG (2MB) | 2048KB | 3.2s |
+| 压缩 JPG | 450KB | 0.8s |
+| WebP 格式 | 280KB | 0.5s |
+| AVIF 格式 | 180KB | 0.3s |
+| AVIF + 响应式 | 95KB | 0.15s |
+
+## 3. CSS 优化
+
+### 内联关键 CSS
+
+Astro 会自动内联 `<style>` 标签中的关键 CSS：
+
+```astro
+---
+// 关键 CSS 会被内联到 HTML <head>
+---
+
+<style>
+  /* 这些样式会被内联 — 首屏关键样式 */
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+
+  .hero {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+  }
+</style>
+
+<!-- 非关键 CSS 可以外部引用 -->
+<link rel="stylesheet" href="/styles/gallery.css" />
+```
+
+### CSS 变量 vs Tailwind
+
+对于博客类站点，CSS 变量通常比 Tailwind 更轻量：
+
+```css
+:root {
+  /* 设计 Token */
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* 间距系统 */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 2rem;
+  --space-xl: 4rem;
+
+  /* 颜色系统 */
+  --color-primary: #6366f1;
+  --color-text: #1a1a2e;
+  --color-bg: #ffffff;
+}
+
+/* 暗黑模式覆盖 */
+[data-theme='dark'] {
+  --color-text: #e2e8f0;
+  --color-bg: #0f172a;
+}
+```
+
+## 4. 字体优化
+
+### 字体加载策略
+
+```astro
+<!-- 方案 1：使用系统字体（零网络开销） -->
+<style>
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+</style>
+
+<!-- 方案 2：预加载自定义字体 -->
+<link
+  rel="preload"
+  href="/fonts/inter-var.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+<style>
+  @font-face {
+    font-family: 'Inter';
+    src: url('/fonts/inter-var.woff2') format('woff2');
+    font-display: swap; /* 避免 FOIT */
+    font-weight: 100 900;
+  }
+</style>
+```
+
+### 字体大小对比
+
+| 方案 | 大小 | 支持字重 |
+|------|------|---------|
+| 传统（6 个 woff2） | ~450KB | 6 个 |
+| 可变字体（1 个 woff2） | ~160KB | 全部 |
+| 系统字体栈 | 0KB | 原生 |
+
+## 5. 缓存策略
+
+### 静态资源缓存头
+
+```
+# Vercel 配置 (vercel.json)
+{
+  "headers": [
+    {
+      "source": "/(.*)\\.(jpg|png|webp|avif|woff2)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(css|js)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}
+```
+
+### HTML 缓存
+
+```
+# HTML 页面使用短缓存 + 验证
+Cache-Control: public, max-age=0, must-revalidate
+```
+
+## 6. 监控与分析
+
+### Lighthouse CI
+
+```yaml
+# .github/workflows/lighthouse.yml
+name: Lighthouse CI
+on: [push]
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Lighthouse
+        run: |
+          npm ci
+          npm run build
+          npx lighthouse-ci autorun \
+            --collect.staticDistDir=./dist \
+            --assert.preset=lighthouse:recommended
+```
+
+## 优化清单
+
+完成以下检查，你的 Astro 站点应该可以达到 Lighthouse 95+ 的分数：
+
+- [ ] 图片使用 AVIF/WebP 格式
+- [ ] 图片设置了响应式尺寸
+- [ ] 非首屏图片使用懒加载
+- [ ] 字体使用 `font-display: swap`
+- [ ] 关键 CSS 内联
+- [ ] JS Islands 使用合适的加载策略
+- [ ] 静态资源设置了长期缓存
+- [ ] 没有不必要的第三方脚本
+- [ ] HTML 语义化，无障碍标签正确
+- [ ] meta 标签完整（viewport, description, OG）
+
+## 总结
+
+性能优化是一个持续的过程，而非一次性的任务。通过本文介绍的方法，你可以系统性地提升 Astro 站点的性能。记住：
+
+1. **测量先行**：使用 Lighthouse 和 WebPageTest 获取基线数据
+2. **逐步优化**：每次只改一个方面，对比前后效果
+3. **自动化**：将性能检查集成到 CI/CD 中
+4. **持续监控**：部署后使用 Chrome UX Report 跟踪真实用户数据

@@ -1,0 +1,101 @@
+---
+/**
+ * MdxComponents —— MDX 组件覆盖映射
+ *
+ * 将标准 HTML 元素替换为自定义样式的 Astro 组件。
+ * 在渲染 MDX 内容时通过 components prop 传入。
+ *
+ * 用法：
+ *   import mdxComponents from '../components/MdxComponents.astro';
+ *   <Content components={mdxComponents} />
+ */
+
+// 自定义 h1 —— 带下划线的大标题
+const CustomH1 = ({ children }: { children: any }) => {
+  return `
+    <h1 style="
+      font-size: 2rem;
+      color: #0f172a;
+      margin: 2rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid #6366f1;
+    ">${children}</h1>
+  `;
+};
+
+// 自定义 h2 —— 带侧边色条的二级标题
+const CustomH2 = ({ children }: { children: any }) => {
+  return `
+    <h2 style="
+      font-size: 1.5rem;
+      color: #1e293b;
+      margin: 1.75rem 0 0.75rem;
+      padding-left: 0.75rem;
+      border-left: 4px solid #6366f1;
+    ">${children}</h2>
+  `;
+};
+
+// 自定义 a —— 外部链接自动新窗口打开
+const CustomA = ({ href, children }: { href: string; children: any }) => {
+  const isExternal = href?.startsWith('http');
+  const attrs = isExternal
+    ? `target="_blank" rel="noopener noreferrer"`
+    : '';
+  return `
+    <a href="${href}" ${attrs} style="
+      color: #6366f1;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    ">${children}${isExternal ? ' &#8599;' : ''}</a>
+  `;
+};
+
+// 自定义 blockquote —— 带渐变边框的引用框
+const CustomBlockquote = ({ children }: { children: any }) => {
+  return `
+    <blockquote style="
+      border-left: 4px solid #6366f1;
+      background: #f8fafc;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      border-radius: 0 8px 8px 0;
+      color: #475569;
+      font-style: italic;
+    ">${children}</blockquote>
+  `;
+};
+
+// 自定义 code —— 行内代码高亮
+const CustomCode = ({ children }: { children: any }) => {
+  return `
+    <code style="
+      background: #e0e7ff;
+      color: #4338ca;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    ">${children}</code>
+  `;
+};
+
+// 导出组件覆盖映射对象
+// key 是 HTML 标签名，value 是自定义组件或渲染函数
+export const components = {
+  h1: CustomH1,
+  h2: CustomH2,
+  a: CustomA,
+  blockquote: CustomBlockquote,
+  code: CustomCode,
+};
+---
+
+<!--
+  此组件不需要渲染任何内容，仅作为导出使用。
+  在页面中这样使用：
+
+  import { components } from '../components/MdxComponents.astro';
+
+  <Content components={components} />
+-->

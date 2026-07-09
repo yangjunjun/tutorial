@@ -1,0 +1,72 @@
+---
+// src/components/Card.astro — 可复用的卡片组件
+// 演示：Props 接收、默认值、具名插槽、scoped 样式
+
+interface Props {
+  title: string;
+  description: string;
+  icon?: string;
+}
+
+const { title, description, icon = "📄" } = Astro.props;
+---
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-icon">{icon}</span>
+    <h3 class="card-title">{title}</h3>
+  </div>
+  <p class="card-description">{description}</p>
+  <!-- 默认插槽：可选的额外内容 -->
+  <div class="card-footer">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .card {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 12px;
+    padding: 24px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: #ff6b6b;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .card-icon {
+    font-size: 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    color: #1a1a2e;
+  }
+
+  .card-description {
+    color: #666;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  /* 如果没有传入 slot 内容，隐藏 footer */
+  .card-footer:empty {
+    display: none;
+  }
+
+  .card-footer {
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+  }
+</style>

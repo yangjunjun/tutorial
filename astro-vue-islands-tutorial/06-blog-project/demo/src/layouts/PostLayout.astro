@@ -1,0 +1,217 @@
+---
+/**
+ * 文章布局组件
+ *
+ * 为博客文章提供语义化的 HTML 结构，包括：
+ * - 文章头部（标题、日期、作者、标签、阅读时间）
+ * - 文章正文（slot）
+ * - 文章侧边栏（目录等）
+ * - 文章尾部
+ */
+import TagList from '../components/TagList.astro';
+
+interface Props {
+  post: {
+    data: {
+      title: string;
+      date: Date;
+      updatedDate?: Date;
+      author: string;
+      description: string;
+      tags: string[];
+      category: string;
+    };
+    slug: string;
+  };
+  headings: { depth: number; slug: string; text: string }[];
+  readingTime: string;
+}
+
+const { post, headings, readingTime } = Astro.props;
+
+// 格式化日期
+const formattedDate = post.data.date.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+const formattedUpdateDate = post.data.updatedDate
+  ? post.data.updatedDate.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  : null;
+---
+
+<div class="post-layout">
+  <!-- 文章主体 -->
+  <div class="post-main">
+    <!-- 文章头部 -->
+    <header class="post-header">
+      <div class="post-meta">
+        <span class="category-badge">{post.data.category}</span>
+        <time datetime={post.data.date.toISOString()}>{formattedDate}</time>
+        {formattedUpdateDate && (
+          <span class="updated">（更新于 {formattedUpdateDate}）</span>
+        )}
+        <span class="separator">·</span>
+        <span class="reading-time">{readingTime}</span>
+      </div>
+
+      <h1 class="post-title">{post.data.title}</h1>
+
+      <p class="post-description">{post.data.description}</p>
+
+      <div class="post-author">
+        <span class="author-avatar">
+          {post.data.author.charAt(0)}
+        </span>
+        <span class="author-name">{post.data.author}</span>
+      </div>
+
+      <div class="post-tags">
+        <TagList tags={post.data.tags} />
+      </div>
+    </header>
+
+    <!-- 文章正文 -->
+    <div class="post-body">
+      <slot />
+    </div>
+
+    <!-- 插槽：文章正文之后的内容（分享按钮等） -->
+    <slot name="footer-before" />
+
+    <!-- 文章尾部 -->
+    <footer class="post-footer">
+      <slot name="footer-after" />
+    </footer>
+  </div>
+
+  <!-- 文章侧边栏 -->
+  <aside class="post-sidebar">
+    <slot name="sidebar" />
+  </aside>
+</div>
+
+<style>
+  .post-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 3rem;
+    align-items: start;
+  }
+
+  /* 文章头部 */
+  .post-header {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border, #e2e8f0);
+  }
+
+  .post-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--color-text-muted, #64748b);
+  }
+
+  .category-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    background: var(--color-primary, #6366f1);
+    color: white;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .separator {
+    opacity: 0.5;
+  }
+
+  .post-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    line-height: 1.3;
+    margin-bottom: 1rem;
+    color: var(--color-text, #1a1a2e);
+  }
+
+  .post-description {
+    font-size: 1.15rem;
+    color: var(--color-text-muted, #64748b);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+
+  .post-author {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .author-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--color-primary, #6366f1);
+    color: white;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .author-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .post-tags {
+    margin-top: 0.5rem;
+  }
+
+  /* 文章正文 */
+  .post-body {
+    margin-bottom: 2rem;
+  }
+
+  /* 文章尾部 */
+  .post-footer {
+    margin-top: 2rem;
+  }
+
+  /* 侧边栏 */
+  .post-sidebar {
+    position: sticky;
+    top: 80px;
+  }
+
+  /* 响应式 */
+  @media (max-width: 1024px) {
+    .post-layout {
+      grid-template-columns: 1fr;
+    }
+    .post-sidebar {
+      position: static;
+      order: -1; /* 在移动端，目录显示在文章前面 */
+    }
+  }
+
+  @media (max-width: 768px) {
+    .post-title {
+      font-size: 1.6rem;
+    }
+    .post-description {
+      font-size: 1rem;
+    }
+  }
+</style>

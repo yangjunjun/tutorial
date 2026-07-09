@@ -1,0 +1,284 @@
+---
+// src/pages/index.astro — 首页
+// Astro 使用基于文件系统的路由：此文件对应 URL 路径 /
+const title = "Astro 入门演示";
+
+// 功能卡片数据
+const features = [
+  {
+    icon: "🚀",
+    title: "极速性能",
+    description: "默认零 JavaScript 输出，页面在服务器端渲染为纯 HTML，加载速度极快。",
+  },
+  {
+    icon: "🏝️",
+    title: "岛屿架构",
+    description: "只为你需要交互的部分加载 JavaScript，其余保持静态，兼顾性能与交互。",
+  },
+  {
+    icon: "🧩",
+    title: "框架无关",
+    description: "在同一项目中混用 Vue、React、Svelte 组件，选择最适合的工具。",
+  },
+  {
+    icon: "📝",
+    title: "内容优先",
+    description: "内置 MDX、内容集合支持，非常适合博客、文档站等内容驱动型网站。",
+  },
+];
+---
+
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+      <div class="container nav-content">
+        <a href="/" class="logo">🌟 Astro Demo</a>
+        <div class="nav-links">
+          <a href="/">首页</a>
+          <a href="/about">关于</a>
+          <a href="/blog">博客</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero 区域 -->
+    <header class="hero">
+      <div class="container">
+        <h1>欢迎来到 <span class="highlight">Astro</span> 的世界</h1>
+        <p class="subtitle">
+          这是一个用 Astro 构建的演示项目，展示了 Astro 的核心能力：<br />
+          文件路由、组件系统、布局嵌套和静态渲染。
+        </p>
+        <div class="hero-actions">
+          <a href="/blog" class="btn btn-primary">浏览博客</a>
+          <a href="/about" class="btn btn-secondary">了解更多</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- 功能展示 -->
+    <section class="features">
+      <div class="container">
+        <h2>核心特性</h2>
+        <div class="features-grid">
+          {
+            features.map((feature) => (
+              <div class="feature-card">
+                <div class="feature-icon">{feature.icon}</div>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- 提示区域 -->
+    <section class="tip">
+      <div class="container">
+        <h2>💡 试试看</h2>
+        <p>
+          打开浏览器的开发者工具（F12），查看 Network 面板。你会发现页面<strong>没有加载任何 JavaScript</strong>！
+          这就是 Astro 的魔力——默认输出纯静态 HTML。
+        </p>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+      <div class="container">
+        <p>Astro + MDX + Vue 3 Islands 教程 · 第一章示例</p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  /* 全局重置（仅限本页） */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* 导航栏 */
+  .navbar {
+    background-color: #1a1a2e;
+    padding: 16px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .nav-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .logo {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .nav-links a {
+    color: #ccc;
+    text-decoration: none;
+    margin-left: 24px;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: #ff6b6b;
+  }
+
+  /* Hero 区域 */
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #fff;
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+
+  .hero h1 {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+    line-height: 1.3;
+  }
+
+  .highlight {
+    color: #ff6b6b;
+  }
+
+  .subtitle {
+    font-size: 1.1rem;
+    color: #b0b0c0;
+    max-width: 600px;
+    margin: 0 auto 32px;
+    line-height: 1.8;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 12px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+  }
+
+  .btn-primary {
+    background: #ff6b6b;
+    color: #fff;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: #ff6b6b;
+    border: 2px solid #ff6b6b;
+  }
+
+  /* 功能展示 */
+  .features {
+    padding: 60px 0;
+    background: #f8f9fa;
+  }
+
+  .features h2 {
+    text-align: center;
+    font-size: 1.8rem;
+    margin-bottom: 40px;
+    color: #1a1a2e;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 24px;
+  }
+
+  .feature-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-4px);
+    border-color: #ff6b6b;
+  }
+
+  .feature-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+  }
+
+  .feature-card h3 {
+    font-size: 1.15rem;
+    margin-bottom: 8px;
+    color: #1a1a2e;
+  }
+
+  .feature-card p {
+    color: #666;
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  /* 提示区域 */
+  .tip {
+    padding: 48px 0;
+    text-align: center;
+  }
+
+  .tip h2 {
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    color: #1a1a2e;
+  }
+
+  .tip p {
+    color: #555;
+    font-size: 1rem;
+    line-height: 1.8;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* 页脚 */
+  .footer {
+    background: #1a1a2e;
+    color: #888;
+    text-align: center;
+    padding: 24px 0;
+    font-size: 0.85rem;
+  }
+</style>

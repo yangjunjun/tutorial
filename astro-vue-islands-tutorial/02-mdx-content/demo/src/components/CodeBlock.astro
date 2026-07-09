@@ -1,0 +1,102 @@
+---
+/**
+ * CodeBlock 组件
+ * 增强型代码块，支持文件名标签和语言标识
+ *
+ * 用法：<CodeBlock language="ts" filename="config.ts">代码内容</CodeBlock>
+ */
+
+interface Props {
+  /** 编程语言名称 */
+  language?: string;
+  /** 文件名（可选） */
+  filename?: string;
+}
+
+const { language = 'text', filename } = Astro.props;
+---
+
+<div class="code-block">
+  {/* 顶部工具栏 */}
+  <div class="code-header">
+    {filename && (
+      <span class="code-filename">
+        {filename}
+      </span>
+    )}
+    <span class="code-language">
+      {language}
+    </span>
+  </div>
+
+  {/* 代码内容 */}
+  <div class="code-body">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .code-block {
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1.25rem 0;
+    border: 1px solid #334155;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0f172a;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #334155;
+  }
+
+  .code-filename {
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .code-filename::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #6366f1;
+  }
+
+  .code-language {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.15);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .code-body {
+    background: #1e293b;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+  }
+
+  .code-body :global(pre) {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .code-body :global(code) {
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+  }
+</style>

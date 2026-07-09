@@ -1,0 +1,100 @@
+---
+/**
+ * Callout 组件
+ * 用于在 MDX 文章中显示提示信息框
+ *
+ * 用法：<Callout type="info" title="标题">内容</Callout>
+ */
+
+interface Props {
+  /** 提示类型：info（信息）、warning（警告）、tip（技巧） */
+  type?: 'info' | 'warning' | 'tip';
+  /** 可选标题 */
+  title?: string;
+}
+
+const { type = 'info', title } = Astro.props;
+
+// 不同类型的图标和配色
+const config = {
+  info: {
+    icon: 'i',
+    bgColor: '#eff6ff',
+    borderColor: '#3b82f6',
+    iconBg: '#3b82f6',
+    iconColor: '#ffffff',
+    titleColor: '#1d4ed8',
+  },
+  warning: {
+    icon: '!',
+    bgColor: '#fffbeb',
+    borderColor: '#f59e0b',
+    iconBg: '#f59e0b',
+    iconColor: '#ffffff',
+    titleColor: '#b45309',
+  },
+  tip: {
+    icon: '*',
+    bgColor: '#f0fdf4',
+    borderColor: '#22c55e',
+    iconBg: '#22c55e',
+    iconColor: '#ffffff',
+    titleColor: '#15803d',
+  },
+};
+
+const c = config[type];
+---
+
+<div
+  class="callout"
+  style={`
+    background: ${c.bgColor};
+    border-left: 4px solid ${c.borderColor};
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  `}
+>
+  <span
+    class="callout-icon"
+    style={`
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      border-radius: 50%;
+      background: ${c.iconBg};
+      color: ${c.iconColor};
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-top: 2px;
+    `}
+  >
+    {c.icon}
+  </span>
+
+  <div class="callout-body">
+    {title && (
+      <div
+        class="callout-title"
+        style={`
+          font-weight: 600;
+          color: ${c.titleColor};
+          margin-bottom: 0.35rem;
+          font-size: 0.95rem;
+        `}
+      >
+        {title}
+      </div>
+    )}
+    <div class="callout-content" style="font-size: 0.9rem; color: #374151; line-height: 1.6;">
+      <slot />
+    </div>
+  </div>
+</div>

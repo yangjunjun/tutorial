@@ -1,0 +1,102 @@
+---
+/**
+ * 按标签筛选文章 — 每个标签生成一个静态页面
+ *
+ * 使用 getStaticPaths 在构建时为每个标签生成页面
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostCard from '../../components/PostCard.astro';
+import { getCollection } from 'astro:content';
+import { getReadingTime } from '../../utils/reading-time';
+
+// 为每个标签生成一个静态页面
+export async function getStaticPaths() {
+  const allPosts = await getCollection('posts', ({ data }) => data.draft !== true);
+
+  // 收集所有不重复的标签
+  const tags = new Set<string>();
+  allPosts.forEach(post => {
+    post.data.tags.forEach(tag => tags.add(tag));
+  });
+
+  // 为每个标签生成路径和 props
+  return [...tags].map(tag => ({
+    params: { tag },
+    props: {
+      tag,
+      posts: allPosts
+        .filter(post => post.data.tags.includes(tag))
+        .sort((a, b) => b.data.date.getTime() - a.data.date.getTime()),
+    },
+  }));
+}
+
+const { tag, posts } = Astro.props;
+---
+
+<BaseLayout
+  title={`${tag} - 标签文章 - Astro Vue Islands 博客`}
+  description={`查看标签 "${tag}" 下的所有文章，共 ${posts.length} 篇`}
+>
+  <div class="tag-header">
+    <a href="/tags" class="back-link">← 返回所有标签</a>
+    <h1>
+      标签：<span class="tag-highlight">{tag}</span>
+    </h1>
+    <p class="post-count">共 {posts.length} 篇文章</p>
+  </div>
+
+  <div class="post-list">
+    {posts.map((post) => {
+      const readingTime = getReadingTime(post.body || '');
+      return (
+        <PostCard
+          title={post.data.title}
+          date={post.data.date}
+          description={post.data.description}
+          tags={post.data.tags}
+          href={`/blog/${post.slug}/`}
+          readingTime={readingTime}
+        />
+      );
+    })}
+  </div>
+</BaseLayout>
+
+<style>
+  .tag-header {
+    margin-bottom: 2rem;
+  }
+
+  .back-link {
+    display: inline-block;
+    color: var(--color-primary, #6366f1);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  .tag-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .tag-highlight {
+    color: var(--color-primary, #6366f1);
+  }
+
+  .post-count {
+    color: var(--color-text-muted, #64748b);
+    font-size: 0.95rem;
+  }
+
+  .post-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+</style>

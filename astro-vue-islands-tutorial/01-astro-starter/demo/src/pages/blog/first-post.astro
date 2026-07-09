@@ -1,0 +1,199 @@
+---
+// src/pages/blog/first-post.astro — 示例博客文章
+// 对应路由：/blog/first-post
+import BaseLayout from '../../components/BaseLayout.astro';
+
+// 文章元数据
+const post = {
+  title: "我的第一篇博客：认识 Astro",
+  date: "2024-12-01",
+  author: "教程作者",
+};
+
+// 格式化日期
+const formattedDate = new Date(post.date).toLocaleDateString("zh-CN", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+---
+
+<BaseLayout title={`${post.title} - Astro Demo`}>
+  <article class="post">
+    <!-- 文章头部 -->
+    <header class="post-header">
+      <h1>{post.title}</h1>
+      <div class="post-meta">
+        <span>作者：{post.author}</span>
+        <time datetime={post.date}>{formattedDate}</time>
+      </div>
+    </header>
+
+    <!-- 文章正文 -->
+    <div class="post-content">
+      <p>
+        欢迎来到本教程的第一篇文章！在这篇文章中，我们将了解 Astro 框架的核心理念，
+        以及为什么它是一个非常适合构建内容驱动型网站的选择。
+      </p>
+
+      <h2>什么是 Astro？</h2>
+      <p>
+        Astro 是一个现代化的静态站点生成器（SSG），同时也支持服务端渲染（SSR）。
+        它最大的特点是 <strong>Islands Architecture（岛屿架构）</strong>——
+        默认情况下，页面不会向浏览器发送任何 JavaScript。
+      </p>
+
+      <h2>Astro 组件语法</h2>
+      <p>
+        Astro 使用 <code>.astro</code> 文件格式，由两部分组成：frontmatter 和 HTML 模板。
+      </p>
+
+      <pre><code>{`---
+// Frontmatter（服务端执行）
+const title = "Hello";
+---
+
+<!-- HTML 模板 -->
+<h1>{title}</h1>
+<p>这会被渲染到页面上。</p>`}</code></pre>
+
+      <h2>核心优势</h2>
+      <ul>
+        <li><strong>性能优先</strong>：默认零 JS，HTML 优先输出</li>
+        <li><strong>灵活集成</strong>：支持 React、Vue、Svelte 等框架的组件</li>
+        <li><strong>内容友好</strong>：内置 MDX 和 Markdown 支持</li>
+        <li><strong>文件路由</strong>：基于文件系统自动生成路由</li>
+      </ul>
+
+      <h2>下一步</h2>
+      <p>
+        在下一章中，我们将学习如何将 MDX 集成到 Astro 项目中，
+        实现更丰富的内容编写体验。MDX 允许我们在 Markdown 中直接使用 JSX 组件，
+        这意味着你的文档和博客可以包含交互式元素。
+      </p>
+
+      <blockquote>
+        <p>
+          "Astro 的哲学是：少即是多。发送更少的 JavaScript，
+          获得更好的用户体验。"
+        </p>
+      </blockquote>
+    </div>
+
+    <!-- 文章底部导航 -->
+    <footer class="post-footer">
+      <a href="/blog">&larr; 返回博客列表</a>
+    </footer>
+  </article>
+</BaseLayout>
+
+<style>
+  .post {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 0;
+  }
+
+  /* 文章头部 */
+  .post-header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .post-header h1 {
+    font-size: 2rem;
+    color: #1a1a2e;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+
+  .post-meta {
+    display: flex;
+    gap: 24px;
+    color: #999;
+    font-size: 0.9rem;
+  }
+
+  /* 文章正文 */
+  .post-content {
+    font-size: 1.05rem;
+    line-height: 1.9;
+    color: #333;
+  }
+
+  .post-content h2 {
+    font-size: 1.4rem;
+    color: #1a1a2e;
+    margin-top: 40px;
+    margin-bottom: 16px;
+  }
+
+  .post-content p {
+    margin-bottom: 16px;
+  }
+
+  .post-content ul {
+    padding-left: 24px;
+    margin-bottom: 16px;
+  }
+
+  .post-content li {
+    margin-bottom: 8px;
+  }
+
+  .post-content code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+
+  .post-content pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+  }
+
+  .post-content pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: 0.85rem;
+  }
+
+  .post-content blockquote {
+    border-left: 4px solid #ff6b6b;
+    padding: 16px 20px;
+    margin: 24px 0;
+    background: #fff5f5;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .post-content blockquote p {
+    color: #555;
+    font-style: italic;
+    margin: 0;
+  }
+
+  /* 文章底部 */
+  .post-footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid #eee;
+  }
+
+  .post-footer a {
+    color: #ff6b6b;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .post-footer a:hover {
+    color: #e05555;
+  }
+</style>

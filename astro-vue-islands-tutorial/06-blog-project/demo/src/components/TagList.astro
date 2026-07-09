@@ -1,0 +1,51 @@
+---
+/**
+ * TagList.astro — 标签列表组件
+ *
+ * 显示一组标签徽章，可点击跳转到标签页面
+ */
+
+interface Props {
+  tags: string[];
+  linked?: boolean; // 是否生成链接，默认 true
+}
+
+const { tags, linked = true } = Astro.props;
+---
+
+<div class="tag-list">
+  {tags.map(tag => (
+    linked ? (
+      <a href={`/tags/${tag}/`} class="tag-badge">
+        {tag}
+      </a>
+    ) : (
+      <span class="tag-badge">{tag}</span>
+    )
+  ))}
+</div>
+
+<style>
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .tag-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    background: var(--color-primary-light, #eef2ff);
+    color: var(--color-primary, #6366f1);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  a.tag-badge:hover {
+    background: var(--color-primary, #6366f1);
+    color: white;
+  }
+</style>

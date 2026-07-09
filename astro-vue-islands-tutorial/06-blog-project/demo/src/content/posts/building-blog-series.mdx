@@ -1,0 +1,228 @@
+---
+title: "构建完整博客：从设计到部署的实战指南"
+date: 2024-12-22
+author: "张三"
+description: "手把手带你构建一个功能完整的个人博客，涵盖内容管理、页面路由、组件设计和交互功能等核心环节。"
+tags: ["astro", "project", "blog"]
+category: "实战"
+---
+
+# 构建完整博客：实战指南
+
+在这个系列中，我们已经学习了 Astro 的基础、Vue Islands 架构和 MDX 内容增强。现在是时候将这些知识整合起来，构建一个真正可以上线的完整博客了。
+
+## 项目规划
+
+### 功能清单
+
+我们的博客需要以下核心功能：
+
+- [x] MDX 文章撰写与管理
+- [x] 标签和分类系统
+- [x] 文章列表与分页
+- [x] 文章详情页
+- [x] 客户端搜索
+- [x] RSS 订阅
+- [x] 暗黑模式
+- [x] 阅读时间估算
+- [x] 响应式设计
+- [x] SEO 优化
+
+### 技术选型
+
+| 领域 | 技术选择 | 理由 |
+|------|---------|------|
+| 框架 | Astro 4.x | SSG 优先，性能极佳 |
+| 内容 | MDX + Content Collections | 类型安全 + 组件嵌入 |
+| 交互 | Vue 3 Islands | 轻量级，按需加载 |
+| 状态 | Nano Store | 跨岛屿共享状态 |
+| 样式 | CSS Variables + Scoped CSS | 无需额外框架 |
+
+## Content Collections 设计
+
+### Schema 定义
+
+```typescript
+// src/content/config.ts
+import { z, defineCollection } from 'astro:content';
+
+const posts = defineCollection({
+  type: 'content',
+  schema: ({ image }) => z.object({
+    title: z.string(),
+    date: z.coerce.date(),
+    updatedDate: z.coerce.date().optional(),
+    author: z.string(),
+    description: z.string(),
+    tags: z.array(z.string()),
+    category: z.enum(['教程', '深度', '实战', '工具', '随笔']),
+    draft: z.boolean().optional().default(false),
+    cover: image().optional(),
+  }),
+});
+
+export const collections = { posts };
+```
+
+### 关键设计决策
+
+1. **`type: 'content'`**：支持 MDX 组件渲染
+2. **`z.coerce.date()`**：自动将日期字符串转为 Date 对象
+3. **`image()`**：支持本地图片引用和自动优化
+4. **`draft` 字段**：构建时可以跳过草稿文章
+
+## 页面路由设计
+
+```
+首页 (/)
+├── 博客列表 (/blog)
+│   └── 文章详情 (/blog/[slug])
+├── 标签 (/tags)
+│   └── 标签详情 (/tags/[tag])
+├── 搜索 (/search)
+└── 关于 (/about)
+```
+
+### 动态路由示例
+
+```astro
+---
+// src/pages/blog/[...slug].astro
+import { getCollection } from 'astro:content';
+import PostLayout from '../../layouts/PostLayout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) => {
+    // 过滤掉草稿文章
+    return data.draft !== true;
+  });
+
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content, headings } = await post.render();
+---
+
+<PostLayout post={post} headings={headings}>
+  <Content />
+</PostLayout>
+```
+
+## 组件设计
+
+### 文章卡片
+
+```astro
+---
+// src/components/PostCard.astro
+interface Props {
+  title: string;
+  date: Date;
+  description: string;
+  tags: string[];
+  href: string;
+}
+
+const { title, date, description, tags, href } = Astro.props;
+
+// 格式化日期
+const formattedDate = date.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<a href={href} class="post-card">
+  <div class="card-content">
+    <time datetime={date.toISOString()}>{formattedDate}</time>
+    <h3>{title}</h3>
+    <p>{description}</p>
+    <div class="tags">
+      {tags.map(tag => (
+        <span class="tag">{tag}</span>
+      ))}
+    </div>
+  </div>
+</a>
+```
+
+## 交互功能实现
+
+### 客户端搜索
+
+搜索功能需要加载全部文章数据，因此使用 Vue Island：
+
+```astro
+---
+import { getCollection } from 'astro:content';
+import SearchWidget from '../components/vue/SearchWidget.vue';
+
+const posts = await getCollection('posts');
+const searchData = posts.map(post => ({
+  title: post.data.title,
+  description: post.data.description,
+  tags: post.data.tags,
+  slug: post.slug,
+}));
+---
+
+<SearchWidget client:load posts={searchData} />
+```
+
+### 暗黑模式
+
+使用 Nano Store 实现跨组件主题共享：
+
+```typescript
+// src/stores/theme.ts
+import { atom } from 'nanostores';
+
+type Theme = 'light' | 'dark';
+
+export const $theme = atom<Theme>('light');
+
+// 初始化时从 localStorage 读取
+if (typeof window !== 'undefined') {
+  const saved = localStorage.getItem('theme') as Theme;
+  if (saved) $theme.set(saved);
+}
+```
+
+## 部署准备
+
+### 构建检查清单
+
+- [ ] `npm run build` 无错误
+- [ ] 所有页面正常渲染
+- [ ] RSS feed 生成正确
+- [ ] Sitemap 包含所有页面
+- [ ] 图片正确加载
+- [ ] 暗黑模式正常工作
+- [ ] 搜索功能正常
+- [ ] 分页导航正确
+
+### 推荐的部署平台
+
+1. **Vercel**：零配置部署，自动 HTTPS
+2. **Netlify**：表单处理和 Edge Functions
+3. **Cloudflare Pages**：全球 CDN，速度快
+4. **GitHub Pages**：免费，适合静态站点
+
+详细的部署教程请参考[部署章节](../../07-deploy/readme.md)。
+
+## 总结
+
+通过这个项目，你学会了如何：
+
+1. 使用 Content Collections 管理博客内容
+2. 设计合理的页面路由结构
+3. 复用 Astro 组件构建 UI
+4. 使用 Vue Islands 添加交互
+5. 使用 Nano Store 共享状态
+
+这是一个功能完整的博客起点。你可以在此基础上继续扩展，添加评论系统、国际化、更多交互功能等。

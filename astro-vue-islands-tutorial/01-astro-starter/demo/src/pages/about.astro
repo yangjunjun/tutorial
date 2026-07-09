@@ -1,0 +1,160 @@
+---
+// src/pages/about.astro — 关于页面
+// 对应路由：/about
+import BaseLayout from '../components/BaseLayout.astro';
+
+// 演示 Props 的使用：向 BaseLayout 传递自定义标题
+const pageTitle = "关于 Astro";
+
+// 技术栈数据（演示在 frontmatter 中处理数据）
+const techStack = [
+  { name: "Astro", role: "站点框架 — 路由、构建、SSG/SSR" },
+  { name: "MDX", role: "内容编写 — Markdown + JSX 组件" },
+  { name: "Vue 3", role: "交互组件 — Islands 架构中的岛屿" },
+];
+---
+
+<BaseLayout title={pageTitle}>
+  <main class="about-page">
+    <h1>关于本项目</h1>
+
+    <section class="intro">
+      <p>
+        这是一个 <strong>Astro + MDX + Vue 3 Islands</strong> 渐进式教程的
+        第一章示例项目。通过这个项目，你可以了解 Astro 的基本工作原理。
+      </p>
+    </section>
+
+    <section class="tech-stack">
+      <h2>技术栈</h2>
+      <div class="tech-list">
+        {
+          techStack.map((tech) => (
+            <div class="tech-item">
+              <span class="tech-name">{tech.name}</span>
+              <span class="tech-role">{tech.role}</span>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="highlight-box">
+      <h2>🎯 关键知识点</h2>
+      <ul>
+        <li>本页使用了 <code>BaseLayout</code> 布局组件包裹整个页面</li>
+        <li>通过 <code>Astro.props</code> 向布局传递了自定义标题</li>
+        <li>所有样式都是 <strong>作用域隔离</strong> 的（scoped），不会影响其他页面</li>
+        <li>本页面同样是纯静态 HTML，不包含任何客户端 JavaScript</li>
+      </ul>
+    </section>
+
+    <div class="back-link">
+      <a href="/">&larr; 返回首页</a>
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .about-page {
+    padding: 40px 0;
+  }
+
+  h1 {
+    font-size: 2rem;
+    color: #1a1a2e;
+    margin-bottom: 24px;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    color: #1a1a2e;
+    margin-bottom: 16px;
+    margin-top: 32px;
+  }
+
+  .intro p {
+    font-size: 1.05rem;
+    line-height: 1.8;
+    color: #444;
+  }
+
+  /* 技术栈列表 */
+  .tech-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .tech-item {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #f0f4ff;
+    border-radius: 8px;
+    border-left: 4px solid #ff6b6b;
+  }
+
+  .tech-name {
+    font-weight: 700;
+    color: #1a1a2e;
+    min-width: 80px;
+  }
+
+  .tech-role {
+    color: #555;
+    font-size: 0.95rem;
+  }
+
+  /* 知识点高亮框 */
+  .highlight-box {
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 32px;
+  }
+
+  .highlight-box ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .highlight-box li {
+    padding: 6px 0;
+    color: #555;
+    line-height: 1.6;
+  }
+
+  .highlight-box li::before {
+    content: "✓ ";
+    color: #52c41a;
+    font-weight: bold;
+  }
+
+  .highlight-box code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+
+  /* 返回链接 */
+  .back-link {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid #eee;
+  }
+
+  .back-link a {
+    color: #ff6b6b;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .back-link a:hover {
+    color: #e05555;
+  }
+</style>

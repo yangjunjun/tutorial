@@ -1,0 +1,288 @@
+---
+/**
+ * 部署示例页面
+ *
+ * 展示当前部署的平台信息和环境状态
+ */
+import DeployBadge from '../components/DeployBadge.astro';
+
+// 构建时间戳
+const buildTime = new Date().toISOString();
+
+// 安全地获取环境变量（只展示 PUBLIC_ 开头的变量）
+const publicVars = Object.entries(import.meta.env)
+  .filter(([key]) => key.startsWith('PUBLIC_'))
+  .map(([key, value]) => ({ key, value: String(value) }));
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astro 部署演示</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Astro 部署状态</h1>
+        <p class="subtitle">部署信息与环境检查</p>
+      </header>
+
+      <!-- 部署徽章 -->
+      <DeployBadge buildTime={buildTime} />
+
+      <!-- 构建信息 -->
+      <section class="info-section">
+        <h2>构建信息</h2>
+        <table>
+          <tr>
+            <td>构建时间</td>
+            <td><time>{buildTime}</time></td>
+          </tr>
+          <tr>
+            <td>Astro 版本</td>
+            <td>{Astro.generator || 'Unknown'}</td>
+          </tr>
+          <tr>
+            <td>输出模式</td>
+            <td>静态 (SSG)</td>
+          </tr>
+          <tr>
+            <td>Node.js</td>
+            <td>构建时环境</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- 环境变量 -->
+      <section class="info-section">
+        <h2>公开环境变量</h2>
+        {publicVars.length > 0 ? (
+          <table>
+            {publicVars.map(({ key, value }) => (
+              <tr>
+                <td><code>{key}</code></td>
+                <td><code>{value}</code></td>
+              </tr>
+            ))}
+          </table>
+        ) : (
+          <p class="empty-state">未配置公开环境变量（以 <code>PUBLIC_</code> 开头的变量会在此显示）</p>
+        )}
+      </section>
+
+      <!-- 部署平台指南 -->
+      <section class="info-section">
+        <h2>部署平台指南</h2>
+        <div class="platform-grid">
+          <a href="https://vercel.com" target="_blank" rel="noopener" class="platform-card">
+            <span class="platform-name">Vercel</span>
+            <span class="platform-desc">零配置部署，自动 Preview</span>
+          </a>
+          <a href="https://netlify.com" target="_blank" rel="noopener" class="platform-card">
+            <span class="platform-name">Netlify</span>
+            <span class="platform-desc">表单处理 + Edge Functions</span>
+          </a>
+          <a href="https://pages.cloudflare.com" target="_blank" rel="noopener" class="platform-card">
+            <span class="platform-name">Cloudflare Pages</span>
+            <span class="platform-desc">全球 CDN + Workers</span>
+          </a>
+          <a href="https://pages.github.com" target="_blank" rel="noopener" class="platform-card">
+            <span class="platform-name">GitHub Pages</span>
+            <span class="platform-desc">免费静态托管 + Actions</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- 快速命令 -->
+      <section class="info-section">
+        <h2>部署命令速查</h2>
+        <div class="commands">
+          <div class="command-item">
+            <code>npm run build</code>
+            <span>构建生产版本</span>
+          </div>
+          <div class="command-item">
+            <code>npm run preview</code>
+            <span>本地预览生产版本</span>
+          </div>
+          <div class="command-item">
+            <code>npx astro check</code>
+            <span>类型检查和诊断</span>
+          </div>
+          <div class="command-item">
+            <code>wrangler pages deploy dist</code>
+            <span>部署到 Cloudflare Pages</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
+
+<style>
+  /* 全局样式 */
+  :global(body) {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #818cf8, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    color: #94a3b8;
+    font-size: 1.1rem;
+  }
+
+  /* 信息区域 */
+  .info-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .info-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #334155;
+    color: #c7d2fe;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0.5rem;
+  }
+
+  td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  td:first-child {
+    font-weight: 600;
+    color: #94a3b8;
+    white-space: nowrap;
+    width: 160px;
+  }
+
+  code {
+    background: #1e293b;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: #818cf8;
+  }
+
+  .empty-state {
+    color: #64748b;
+    font-style: italic;
+    padding: 1rem;
+    background: #1e293b;
+    border-radius: 8px;
+  }
+
+  /* 平台卡片网格 */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .platform-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.25rem;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    text-decoration: none;
+    color: #e2e8f0;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .platform-card:hover {
+    border-color: #818cf8;
+    transform: translateY(-2px);
+  }
+
+  .platform-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+  }
+
+  .platform-desc {
+    font-size: 0.85rem;
+    color: #94a3b8;
+  }
+
+  /* 命令列表 */
+  .commands {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .command-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #1e293b;
+    border-radius: 8px;
+    border: 1px solid #334155;
+  }
+
+  .command-item code {
+    background: none;
+    padding: 0;
+    font-size: 0.9rem;
+  }
+
+  .command-item span {
+    font-size: 0.85rem;
+    color: #94a3b8;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1.5rem 1rem;
+    }
+    header h1 {
+      font-size: 1.8rem;
+    }
+    .platform-grid {
+      grid-template-columns: 1fr;
+    }
+    .command-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+  }
+</style>

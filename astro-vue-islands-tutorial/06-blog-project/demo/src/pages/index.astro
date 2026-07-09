@@ -1,0 +1,262 @@
+---
+/**
+ * 首页 — 博客入口
+ *
+ * 展示最新文章、分类链接和标签云
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PostCard from '../components/PostCard.astro';
+import TagList from '../components/TagList.astro';
+import { getCollection } from 'astro:content';
+
+// 获取所有已发布的文章（排除草稿）
+const allPosts = await getCollection('posts', ({ data }) => {
+  return data.draft !== true;
+});
+
+// 按日期降序排列，取最新 3 篇
+const recentPosts = allPosts
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .slice(0, 3);
+
+// 收集所有分类
+const categories = [...new Set(allPosts.map(post => post.data.category))];
+
+// 收集所有标签及其文章数量
+const tagCounts: Record<string, number> = {};
+allPosts.forEach(post => {
+  post.data.tags.forEach(tag => {
+    tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+  });
+});
+const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+---
+
+<BaseLayout title="首页 - Astro Vue Islands 博客" description="使用 Astro + MDX + Vue 3 Islands 构建的现代技术博客">
+  <!-- 英雄区域 -->
+  <section class="hero">
+    <h1>Astro Vue Islands 博客</h1>
+    <p class="hero-subtitle">
+      探索前端开发的无限可能 — Astro · Vue 3 · MDX
+    </p>
+    <div class="hero-stats">
+      <span class="stat">{allPosts.length} 篇文章</span>
+      <span class="stat-separator">·</span>
+      <span class="stat">{categories.length} 个分类</span>
+      <span class="stat-separator">·</span>
+      <span class="stat">{sortedTags.length} 个标签</span>
+    </div>
+  </section>
+
+  <!-- 最新文章 -->
+  <section class="recent-posts">
+    <div class="section-header">
+      <h2>最新文章</h2>
+      <a href="/blog" class="view-all">查看全部 →</a>
+    </div>
+    <div class="posts-grid">
+      {recentPosts.map(post => (
+        <PostCard
+          title={post.data.title}
+          date={post.data.date}
+          description={post.data.description}
+          tags={post.data.tags}
+          href={`/blog/${post.slug}/`}
+        />
+      ))}
+    </div>
+  </section>
+
+  <!-- 分类导航 -->
+  <section class="categories">
+    <h2>文章分类</h2>
+    <div class="category-links">
+      {categories.map(category => {
+        const count = allPosts.filter(p => p.data.category === category).length;
+        return (
+          <a href={`/tags?category=${encodeURIComponent(category)}`} class="category-card">
+            <span class="category-name">{category}</span>
+            <span class="category-count">{count} 篇</span>
+          </a>
+        );
+      })}
+    </div>
+  </section>
+
+  <!-- 标签云 -->
+  <section class="tag-cloud">
+    <h2>热门标签</h2>
+    <div class="tags">
+      {sortedTags.map(([tag, count]) => (
+        <a href={`/tags/${tag}/`} class="tag-badge">
+          {tag} <span class="tag-count">{count}</span>
+        </a>
+      ))}
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  /* 英雄区域 */
+  .hero {
+    text-align: center;
+    padding: 4rem 1rem;
+    background: var(--color-hero-bg, linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%));
+    color: white;
+    border-radius: 16px;
+    margin-bottom: 3rem;
+  }
+
+  .hero h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 800;
+  }
+
+  .hero-subtitle {
+    font-size: 1.2rem;
+    opacity: 0.9;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    opacity: 0.85;
+  }
+
+  .stat-separator {
+    opacity: 0.5;
+  }
+
+  /* 最新文章 */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .view-all {
+    color: var(--color-primary, #6366f1);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .view-all:hover {
+    text-decoration: underline;
+  }
+
+  .posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  /* 分类导航 */
+  .categories {
+    margin-bottom: 3rem;
+  }
+
+  .categories h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .category-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .category-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background: var(--color-card-bg, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--color-text, #1a1a2e);
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .category-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-primary, #6366f1);
+  }
+
+  .category-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .category-count {
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #64748b);
+  }
+
+  /* 标签云 */
+  .tag-cloud {
+    margin-bottom: 3rem;
+  }
+
+  .tag-cloud h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .tag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.9rem;
+    background: var(--color-tag-bg, #eef2ff);
+    color: var(--color-primary, #6366f1);
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .tag-badge:hover {
+    background: var(--color-primary, #6366f1);
+    color: white;
+  }
+
+  .tag-count {
+    font-size: 0.75rem;
+    opacity: 0.7;
+  }
+
+  /* 响应式 */
+  @media (max-width: 768px) {
+    .hero h1 {
+      font-size: 1.8rem;
+    }
+    .posts-grid {
+      grid-template-columns: 1fr;
+    }
+    .category-links {
+      flex-direction: column;
+    }
+  }
+</style>

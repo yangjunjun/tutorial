@@ -1,0 +1,110 @@
+---
+title: "Content Collections 详解"
+description: "深入理解 Astro Content Collections 的 schema 定义与数据获取"
+category: "guide"
+order: 2
+---
+
+# Content Collections 详解
+
+Content Collections 是 Astro 提供的内容管理方案，通过 Zod schema 实现类型安全的 frontmatter。
+
+## 为什么要用 Content Collections？
+
+直接在 frontmatter 里写数据容易出错：
+
+```yaml
+# 缺少必填字段？类型不对？运行时才发现就晚了。
+---
+title: 我的文章
+date: "不是日期格式"
+---
+```
+
+Content Collections 在**构建时**就能捕获这些问题。
+
+## 定义 Schema
+
+```ts
+import { defineCollection, z } from 'astro:content';
+
+const articles = defineCollection({
+  schema: z.object({
+    title: z.string(),
+    date: z.date(),
+    author: z.string(),
+    tags: z.array(z.string()),
+    draft: z.boolean().optional().default(false),
+  }),
+});
+
+export const collections = { articles };
+```
+
+## 获取数据
+
+### 获取整个集合
+
+```ts
+import { getCollection } from 'astro:content';
+
+const allArticles = await getCollection('articles');
+
+// 带过滤条件
+const published = await getCollection('articles', ({ data }) => {
+  return data.draft !== true;
+});
+```
+
+### 获取单个条目
+
+```ts
+import { getEntry } from 'astro:content';
+
+const article = await getEntry('articles', 'hello-mdx');
+
+// 访问数据
+console.log(article.data.title);  // 类型安全！
+console.log(article.data.date);   // Date 对象
+```
+
+## 渲染内容
+
+```astro
+---
+import { getEntry, Content } from 'astro:content';
+
+const entry = await getEntry('articles', 'hello-mdx');
+const { Content } = await entry.render();
+---
+
+<article>
+  <h1>{entry.data.title}</h1>
+  <Content />
+</article>
+```
+
+## 高级用法
+
+### 动态 Schema
+
+可以使用 `z.object()` 的链式调用构建复杂 schema：
+
+```ts
+schema: z.object({
+  title: z.string().min(1).max(100),
+  description: z.string().optional(),
+  related: z.array(z.string()).default([]),
+  metadata: z.object({
+    readingTime: z.number(),
+    language: z.enum(['zh-CN', 'en-US']),
+  }).optional(),
+})
+```
+
+## 小结
+
+Content Collections 提供了：
+- 构建时类型校验
+- 统一的内容读取 API
+- 与 MDX 的无缝集成

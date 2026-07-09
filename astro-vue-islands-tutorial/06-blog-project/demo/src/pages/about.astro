@@ -1,0 +1,197 @@
+---
+/**
+ * 关于页 — 作者信息
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="关于 - Astro Vue Islands 博客" description="了解博客作者和这个博客项目">
+  <div class="about-page">
+    <div class="about-header">
+      <div class="avatar">
+        <!-- 使用 SVG 作为头像占位 -->
+        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="60" fill="#6366f1"/>
+          <text x="60" y="72" text-anchor="middle" fill="white" font-size="48" font-weight="bold">A</text>
+        </svg>
+      </div>
+      <h1>关于我</h1>
+      <p class="role">前端开发工程师 / 技术博主</p>
+    </div>
+
+    <section class="about-section">
+      <h2>个人简介</h2>
+      <p>
+        你好！我是一名热衷于前端技术的开发者，专注于现代 Web 开发框架和性能优化。
+        这个博客用来分享我在前端开发过程中的学习心得和技术探索。
+      </p>
+    </section>
+
+    <section class="about-section">
+      <h2>技术栈</h2>
+      <div class="tech-stack">
+        <span class="tech-tag">Astro</span>
+        <span class="tech-tag">Vue 3</span>
+        <span class="tech-tag">TypeScript</span>
+        <span class="tech-tag">React</span>
+        <span class="tech-tag">Node.js</span>
+        <span class="tech-tag">Tailwind CSS</span>
+        <span class="tech-tag">Vite</span>
+        <span class="tech-tag">MDX</span>
+      </div>
+    </section>
+
+    <section class="about-section">
+      <h2>关于这个博客</h2>
+      <p>
+        这个博客使用 <strong>Astro</strong> 框架构建，结合 <strong>Vue 3 Islands</strong> 架构
+        和 <strong>MDX</strong> 内容增强。所有页面在构建时生成静态 HTML，仅在需要交互的
+        地方加载 Vue 组件，实现了极致的性能表现。
+      </p>
+      <p>
+        博客的源代码作为教程项目开源在
+        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a> 上，
+        你可以在教程中学习如何从零构建这样一个博客。
+      </p>
+    </section>
+
+    <section class="about-section">
+      <h2>联系方式</h2>
+      <div class="contact-links">
+        <a href="https://github.com" target="_blank" rel="noopener" class="contact-link">
+          <span class="contact-icon">GH</span>
+          <span>GitHub</span>
+        </a>
+        <a href="https://twitter.com" target="_blank" rel="noopener" class="contact-link">
+          <span class="contact-icon">X</span>
+          <span>Twitter / X</span>
+        </a>
+        <a href="mailto:hello@example.com" class="contact-link">
+          <span class="contact-icon">@</span>
+          <span>Email</span>
+        </a>
+        <a href="/rss.xml" class="contact-link rss">
+          <span class="contact-icon">RSS</span>
+          <span>RSS 订阅</span>
+        </a>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .about-page {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .about-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .avatar {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 1.5rem;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 4px solid var(--color-primary, #6366f1);
+  }
+
+  .avatar svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .about-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .role {
+    color: var(--color-text-muted, #64748b);
+    font-size: 1.1rem;
+  }
+
+  .about-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .about-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-border, #e2e8f0);
+  }
+
+  .about-section p {
+    line-height: 1.8;
+    color: var(--color-text, #1a1a2e);
+  }
+
+  .about-section a {
+    color: var(--color-primary, #6366f1);
+  }
+
+  /* 技术栈标签 */
+  .tech-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .tech-tag {
+    padding: 0.4rem 1rem;
+    background: var(--color-tag-bg, #eef2ff);
+    color: var(--color-primary, #6366f1);
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* 联系方式 */
+  .contact-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .contact-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--color-card-bg, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--color-text, #1a1a2e);
+    transition: border-color 0.2s;
+  }
+
+  .contact-link:hover {
+    border-color: var(--color-primary, #6366f1);
+  }
+
+  .contact-link.rss {
+    border-color: #f97316;
+  }
+
+  .contact-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--color-primary, #6366f1);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .contact-link.rss .contact-icon {
+    background: #f97316;
+  }
+</style>

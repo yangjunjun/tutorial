@@ -1,0 +1,239 @@
+---
+/**
+ * 博客列表页 — 支持分页
+ *
+ * 使用 Astro.paginate 实现分页，按日期降序排列
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostCard from '../../components/PostCard.astro';
+import Pagination from '../../components/Pagination.astro';
+import { getCollection } from 'astro:content';
+import { getReadingTime } from '../../utils/reading-time';
+
+// 分页配置：每页 5 篇文章
+const PAGE_SIZE = 5;
+
+export async function getStaticPaths({ paginate }: { paginate: Function }) {
+  const allPosts = await getCollection('posts', ({ data }) => {
+    return data.draft !== true;
+  });
+
+  // 按日期降序排列
+  const sortedPosts = allPosts.sort(
+    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  );
+
+  // 收集所有分类用于侧边栏
+  const categories = [...new Set(allPosts.map(post => post.data.category))];
+
+  return paginate(sortedPosts, {
+    pageSize: PAGE_SIZE,
+    props: { categories },
+  });
+}
+
+const { page } = Astro.props;
+const { categories } = Astro.props;
+
+// 计算所有文章数量
+const allPosts = await getCollection('posts', ({ data }) => data.draft !== true);
+const totalPosts = allPosts.length;
+---
+
+<BaseLayout
+  title={`博客${page.currentPage > 1 ? ` - 第 ${page.currentPage} 页` : ''} - Astro Vue Islands 博客`}
+  description="浏览所有技术文章，按标签和分类筛选"
+>
+  <div class="blog-layout">
+    <!-- 主内容区 -->
+    <main class="blog-main">
+      <div class="blog-header">
+        <h1>所有文章</h1>
+        <p class="post-count">共 {totalPosts} 篇文章，当前第 {page.currentPage} / {page.lastPage} 页</p>
+      </div>
+
+      <div class="post-list">
+        {page.data.map(async (post) => {
+          // 读取文章原始内容以计算阅读时间
+          const readingTime = getReadingTime(post.body || '');
+          return (
+            <PostCard
+              title={post.data.title}
+              date={post.data.date}
+              description={post.data.description}
+              tags={post.data.tags}
+              href={`/blog/${post.slug}/`}
+              readingTime={readingTime}
+            />
+          );
+        })}
+      </div>
+
+      <!-- 分页导航 -->
+      <Pagination
+        url={page.url}
+        currentPage={page.currentPage}
+        lastPage={page.lastPage}
+        prevPage={page.url.prev}
+        nextPage={page.url.next}
+      />
+    </main>
+
+    <!-- 侧边栏 -->
+    <aside class="blog-sidebar">
+      <!-- 分类筛选 -->
+      <div class="sidebar-section">
+        <h3>文章分类</h3>
+        <ul class="category-list">
+          <li>
+            <a href="/blog" class="category-link active">全部</a>
+          </li>
+          {categories.map(category => (
+            <li>
+              <a href={`/tags?category=${encodeURIComponent(category)}`} class="category-link">
+                {category}
+                <span class="count">
+                  {allPosts.filter(p => p.data.category === category).length}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <!-- 搜索入口 -->
+      <div class="sidebar-section">
+        <h3>搜索文章</h3>
+        <a href="/search" class="search-link">
+          使用站内搜索查找文章 →
+        </a>
+      </div>
+
+      <!-- RSS -->
+      <div class="sidebar-section">
+        <h3>订阅</h3>
+        <a href="/rss.xml" class="rss-link">
+          RSS Feed
+        </a>
+      </div>
+    </aside>
+  </div>
+</BaseLayout>
+
+<style>
+  .blog-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  .blog-header {
+    margin-bottom: 2rem;
+  }
+
+  .blog-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .post-count {
+    color: var(--color-text-muted, #64748b);
+    font-size: 0.95rem;
+  }
+
+  .post-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  /* 侧边栏样式 */
+  .blog-sidebar {
+    position: sticky;
+    top: 2rem;
+  }
+
+  .sidebar-section {
+    background: var(--color-card-bg, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .sidebar-section h3 {
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+    color: var(--color-text, #1a1a2e);
+  }
+
+  .category-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .category-list li {
+    margin-bottom: 0.25rem;
+  }
+
+  .category-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--color-text, #1a1a2e);
+    font-size: 0.9rem;
+    transition: background 0.2s;
+  }
+
+  .category-link:hover,
+  .category-link.active {
+    background: var(--color-primary-light, #eef2ff);
+    color: var(--color-primary, #6366f1);
+  }
+
+  .category-link .count {
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #64748b);
+    background: var(--color-border, #e2e8f0);
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+  }
+
+  .search-link,
+  .rss-link {
+    display: block;
+    padding: 0.75rem;
+    background: var(--color-primary, #6366f1);
+    color: white;
+    border-radius: 8px;
+    text-decoration: none;
+    text-align: center;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+
+  .search-link:hover,
+  .rss-link:hover {
+    opacity: 0.9;
+  }
+
+  .rss-link {
+    background: #f97316;
+  }
+
+  /* 响应式 */
+  @media (max-width: 768px) {
+    .blog-layout {
+      grid-template-columns: 1fr;
+    }
+    .blog-sidebar {
+      position: static;
+    }
+  }
+</style>

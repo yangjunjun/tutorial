@@ -1,0 +1,306 @@
+---
+/**
+ * 动态博客页面 - /blog/[slug]
+ *
+ * 使用 getStaticPaths 在构建时生成所有博客页面。
+ * 这是 SSG 动态路由的典型用法。
+ *
+ * export const prerender = true 确保此页面始终静态生成。
+ */
+
+// 强制静态生成（在 hybrid 模式下默认就是 true，显式声明更清晰）
+export const prerender = true;
+
+// 模拟博客文章数据
+interface BlogPost {
+  slug: string;
+  title: string;
+  date: string;
+  excerpt: string;
+  content: string;
+  tags: string[];
+}
+
+const posts: BlogPost[] = [
+  {
+    slug: 'getting-started',
+    title: 'Astro 入门指南',
+    date: '2024-10-01',
+    excerpt: '从零开始学习 Astro 框架的基础知识。',
+    content: `
+Astro 是一个现代化的 Web 框架，专注于内容驱动的网站建设。
+
+## 为什么选择 Astro？
+
+Astro 的核心理念是**默认零 JavaScript**。大多数页面不需要客户端 JavaScript，
+Astro 在构建时将你的组件渲染为纯 HTML，只有在需要交互时才加载 JavaScript。
+
+## 快速开始
+
+\`\`\`bash
+npm create astro@latest
+cd my-project
+npm run dev
+\`\`\`
+
+## 群岛架构
+
+Astro 的独特之处在于群岛架构（Islands Architecture）。
+页面被拆分为静态 HTML 和交互式"岛屿"，
+每个岛屿可以使用不同的前端框架（React、Vue、Svelte 等）。
+    `,
+    tags: ['Astro', '入门', '教程'],
+  },
+  {
+    slug: 'islands-architecture',
+    title: '群岛架构详解',
+    date: '2024-10-15',
+    excerpt: '深入理解 Astro 的群岛架构如何实现局部 hydration。',
+    content: `
+## 什么是群岛架构？
+
+群岛架构是一种 Web 架构模式，将页面分为：
+- **海洋（Ocean）**：静态 HTML，不加载任何 JavaScript
+- **岛屿（Islands）**：交互式组件，独立 hydrate
+
+## 在 Astro 中的实现
+
+通过 \`client:load\`、\`client:visible\`、\`client:idle\` 等指令，
+你可以精确控制哪些组件需要客户端 JavaScript。
+
+\`\`\`astro
+<!-- 这个 Vue 组件会在页面加载时 hydrate -->
+<InteractiveChart client:load />
+
+<!-- 这个只在进入视口时才加载 -->
+<LazyWidget client:visible />
+\`\`\`
+
+## 性能优势
+
+- 减少初始 JavaScript 体积
+- 更快的首次内容绘制（FCP）
+- 更好的交互到下一次绘制（INP）分数
+    `,
+    tags: ['架构', '性能', 'Astro'],
+  },
+  {
+    slug: 'view-transitions',
+    title: 'View Transitions 实战',
+    date: '2024-11-01',
+    excerpt: '使用 View Transitions API 实现丝滑的页面切换效果。',
+    content: `
+## View Transitions API
+
+View Transitions 是浏览器原生 API，允许你在页面导航之间创建平滑的过渡动画。
+Astro 4.0 对其提供了一流的支持。
+
+## 基本用法
+
+在布局的 \`<head>\` 中添加：
+
+\`\`\`html
+<meta name="view-transition" content="same-document" />
+\`\`\`
+
+## 持久化元素
+
+使用 \`transition:persist\` 属性让元素在导航间保持状态：
+
+\`\`\`html
+<div transition:persist="player">
+  <video src="..." autoplay />
+</div>
+\`\`\`
+
+## 自定义动画
+
+通过 CSS 的 \`::view-transition\` 伪元素自定义过渡效果：
+
+\`\`\`css
+::view-transition-old(root) {
+  animation: fade-out 0.3s ease;
+}
+::view-transition-new(root) {
+  animation: fade-in 0.3s ease;
+}
+\`\`\`
+    `,
+    tags: ['View Transitions', '动画', 'Astro'],
+  },
+];
+
+// getStaticPaths 告诉 Astro 需要生成哪些页面
+export async function getStaticPaths() {
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post },
+  }));
+}
+
+// 从 props 获取当前页面的文章数据
+const { post } = Astro.props as { post: BlogPost };
+
+/**
+ * 简易 Markdown → HTML 转换
+ * 实际项目中建议使用 marked / remark 等库
+ */
+function renderContent(md: string): string {
+  return md
+    .trim()
+    // 代码块 ```...```
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    // 行内代码 `...`
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // 二级标题 ## ...
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    // 粗体 **...**
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // 无序列表 - ...
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // 段落（非空行且非 HTML 标签）
+    .replace(/^(?!<[a-z/]|$)(.+)$/gm, '<p>$1</p>');
+}
+---
+
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{post.title} - Astro 博客</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8f9fa;
+      color: #1a1a2e;
+      line-height: 1.8;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    .back-link {
+      display: inline-block;
+      color: #4361ee;
+      text-decoration: none;
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    article {
+      background: white;
+      border: 1px solid #e9ecef;
+      border-radius: 12px;
+      padding: 40px;
+    }
+
+    .article-header {
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .article-header h1 {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .article-meta {
+      color: #6c757d;
+      font-size: 0.9rem;
+    }
+
+    .tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      padding: 2px 10px;
+      background: #e8f4fd;
+      color: #2980b9;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .article-content {
+      font-size: 1rem;
+      white-space: pre-line;
+    }
+
+    .article-content h2 {
+      font-size: 1.3rem;
+      margin: 24px 0 12px;
+    }
+
+    .article-content p {
+      margin-bottom: 16px;
+    }
+
+    .article-content code {
+      background: #f0f2f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .article-content pre {
+      background: #1a1a2e;
+      color: #e8e8e8;
+      padding: 16px 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+
+    .article-content pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    .article-content ul, .article-content ol {
+      margin: 12px 0;
+      padding-left: 24px;
+    }
+
+    .article-content li {
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回首页</a>
+
+    <article>
+      <header class="article-header">
+        <h1>{post.title}</h1>
+        <p class="article-meta">
+          发布于 {post.date} · {post.excerpt}
+        </p>
+        <div class="tags">
+          {post.tags.map((tag) => (
+            <span class="tag">{tag}</span>
+          ))}
+        </div>
+      </header>
+
+      <!-- 文章内容（简易 Markdown 渲染，实际项目中建议使用 marked 等库） -->
+      <div class="article-content" set:html={renderContent(post.content)} />
+    </article>
+  </div>
+</body>
+</html>

@@ -1,0 +1,405 @@
+---
+/**
+ * 首页 —— 展示所有 Vue 岛屿组件及对应的 client 指令
+ *
+ * 每个组件使用不同的 client 指令，以演示各自的水合时机与适用场景。
+ */
+
+import Counter from '../components/vue/Counter.vue';
+import TodoList from '../components/vue/TodoList.vue';
+import ThemeToggle from '../components/vue/ThemeToggle.vue';
+import Accordion from '../components/vue/Accordion.vue';
+import Clock from '../components/vue/Clock.vue';
+
+// Accordion 数据
+const faqItems = [
+  {
+    title: '什么是 Astro Islands？',
+    content: 'Astro Islands 是一种 Web 架构模式，将页面以静态 HTML 为主输出，仅在需要交互的地方嵌入"岛屿"组件。',
+  },
+  {
+    title: '为什么选择 Vue 3？',
+    content: 'Vue 3 提供了 Composition API、更好的 TypeScript 支持和更小的打包体积，非常适合在 Astro 岛屿中使用。',
+  },
+  {
+    title: '如何传递 Props？',
+    content: '在 Astro 页面中直接使用 JSX 风格传递属性即可，Vue 组件通过 defineProps 接收。',
+  },
+];
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vue 3 Islands 演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #f8f9fa;
+      --text: #1a1a2e;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --accent: #6366f1;
+      --accent-light: #e0e7ff;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding: 2rem 0;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      font-size: 1.1rem;
+      color: #64748b;
+    }
+
+    .nav-links {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .nav-links a {
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .nav-links a:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* 指令说明卡片 */
+    .directive-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .directive-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .directive-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+      color: var(--accent);
+      font-family: 'Fira Code', monospace;
+    }
+
+    .directive-card .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .badge-load { background: #fee2e2; color: #dc2626; }
+    .badge-idle { background: #fef3c7; color: #d97706; }
+    .badge-visible { background: #d1fae5; color: #059669; }
+    .badge-only { background: #e0e7ff; color: #4338ca; }
+    .badge-media { background: #f3e8ff; color: #7c3aed; }
+
+    .directive-card p {
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+
+    /* 演示区域 */
+    .demo-section {
+      margin-bottom: 3rem;
+    }
+
+    .demo-section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .demo-section .description {
+      color: #64748b;
+      margin-bottom: 1.25rem;
+      font-size: 0.95rem;
+    }
+
+    .demo-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .demo-label {
+      font-size: 0.75rem;
+      font-family: 'Fira Code', monospace;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .code-hint {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: #f1f5f9;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-family: 'Fira Code', monospace;
+      color: #475569;
+    }
+
+    /* 性能对比表 */
+    .perf-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .perf-table th,
+    .perf-table td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      text-align: left;
+    }
+
+    .perf-table th {
+      background: var(--accent-light);
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    .perf-table td {
+      background: var(--card-bg);
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Vue 3 Islands</h1>
+      <p>Astro + Vue 3 群岛架构演示</p>
+      <div class="nav-links">
+        <a href="/">首页概览</a>
+        <a href="/directives">指令详解</a>
+      </div>
+    </header>
+
+    <!-- Client 指令速查 -->
+    <section class="directive-grid">
+      <div class="directive-card">
+        <span class="badge badge-load">立即加载</span>
+        <h3>client:load</h3>
+        <p>页面加载后立即水合。适用于首屏可见且需要即时交互的组件。</p>
+      </div>
+      <div class="directive-card">
+        <span class="badge badge-idle">空闲时</span>
+        <h3>client:idle</h3>
+        <p>浏览器空闲时水合。适用于非关键交互，不阻塞首屏。</p>
+      </div>
+      <div class="directive-card">
+        <span class="badge badge-visible">可见时</span>
+        <h3>client:visible</h3>
+        <p>元素进入视口时水合。适用于首屏以下的交互组件。</p>
+      </div>
+      <div class="directive-card">
+        <span class="badge badge-only">仅客户端</span>
+        <h3>client:only</h3>
+        <p>跳过 SSR，仅在客户端渲染。适用于依赖浏览器 API 的组件。</p>
+      </div>
+      <div class="directive-card">
+        <span class="badge badge-media">响应式</span>
+        <h3>client:media</h3>
+        <p>满足 CSS 媒体查询时水合。适用于响应式专用组件。</p>
+      </div>
+    </section>
+
+    <!-- 演示 1: Counter (client:load) -->
+    <section class="demo-section">
+      <h2>
+        <span class="demo-label">client:load</span>
+        Counter 计数器
+      </h2>
+      <p class="description">
+        页面加载后立即水合，计数器可以立即点击。适合首屏可见的交互组件。
+      </p>
+      <div class="demo-box">
+        <Counter client:load initialCount={0} />
+      </div>
+      <div class="code-hint">
+        &lt;Counter client:load initialCount={0} /&gt;
+      </div>
+    </section>
+
+    <!-- 演示 2: TodoList (client:load) -->
+    <section class="demo-section">
+      <h2>
+        <span class="demo-label">client:load</span>
+        TodoList 待办事项
+      </h2>
+      <p class="description">
+        展示 Vue 响应式系统：reactive 数组、computed 计算属性、v-model 双向绑定。
+      </p>
+      <div class="demo-box">
+        <TodoList client:load />
+      </div>
+    </section>
+
+    <!-- 演示 3: ThemeToggle (client:idle) -->
+    <section class="demo-section">
+      <h2>
+        <span class="demo-label">client:idle</span>
+        ThemeToggle 主题切换
+      </h2>
+      <p class="description">
+        浏览器空闲时水合。主题切换不是首屏关键功能，可以延迟加载。
+      </p>
+      <div class="demo-box">
+        <ThemeToggle client:idle />
+      </div>
+      <div class="code-hint">
+        &lt;ThemeToggle client:idle /&gt; —— JS 不会阻塞首屏渲染
+      </div>
+    </section>
+
+    <!-- 演示 4: Accordion (client:visible) -->
+    <section class="demo-section">
+      <h2>
+        <span class="demo-label">client:visible</span>
+        Accordion 折叠面板
+      </h2>
+      <p class="description">
+        当滚动到此处时才水合。如果用户没有滚动到这里，JS 根本不会加载。
+      </p>
+      <div class="demo-box">
+        <Accordion client:visible items={faqItems} />
+      </div>
+      <div class="code-hint">
+        &lt;Accordion client:visible :items={faqItems} /&gt;
+      </div>
+    </section>
+
+    <!-- 演示 5: Clock (client:only) -->
+    <section class="demo-section">
+      <h2>
+        <span class="demo-label">client:only="vue"</span>
+        Clock 实时时钟
+      </h2>
+      <p class="description">
+        跳过 SSR，仅在客户端运行。适合依赖 setInterval 等浏览器 API 的组件。
+      </p>
+      <div class="demo-box">
+        <Clock client:only="vue" />
+      </div>
+      <div class="code-hint">
+        &lt;Clock client:only="vue" /&gt; —— 服务端输出为空，客户端接管后渲染
+      </div>
+    </section>
+
+    <!-- 性能对比表 -->
+    <section class="demo-section">
+      <h2>性能对比参考</h2>
+      <p class="description">不同指令对页面加载性能的影响：</p>
+      <table class="perf-table">
+        <thead>
+          <tr>
+            <th>指令</th>
+            <th>JS 加载时机</th>
+            <th>首屏影响</th>
+            <th>典型场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>client:load</code></td>
+            <td>立即</td>
+            <td>中等</td>
+            <td>导航、搜索框、计数器</td>
+          </tr>
+          <tr>
+            <td><code>client:idle</code></td>
+            <td>浏览器空闲</td>
+            <td>低</td>
+            <td>主题切换、非关键 widget</td>
+          </tr>
+          <tr>
+            <td><code>client:visible</code></td>
+            <td>进入视口</td>
+            <td>极低</td>
+            <td>折叠面板、懒加载卡片</td>
+          </tr>
+          <tr>
+            <td><code>client:only</code></td>
+            <td>立即（无 SSR）</td>
+            <td>中等</td>
+            <td>实时时钟、地图</td>
+          </tr>
+          <tr>
+            <td><code>client:media</code></td>
+            <td>媒体查询匹配</td>
+            <td>极低</td>
+            <td>移动端菜单</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      <p>Astro + Vue 3 Islands 教程 &mdash; 第三章演示项目</p>
+    </footer>
+  </div>
+</body>
+</html>

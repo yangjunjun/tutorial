@@ -1,0 +1,112 @@
+---
+// src/components/Counter.astro — 静态计数器
+// 这个组件用于演示 Astro 的一个重要限制：
+// 默认情况下，Astro 组件是纯静态的，不支持客户端交互。
+// 按钮的点击事件不会生效——我们需要引入 Vue Islands 来实现交互（第 03 章）。
+
+// 这个变量只在构建时/服务端生效
+const count = 0;
+---
+
+<div class="counter">
+  <h3>计数器示例</h3>
+  <div class="counter-display">
+    <button class="btn btn-minus" aria-label="减少">−</button>
+    <span class="count">{count}</span>
+    <button class="btn btn-plus" aria-label="增加">+</button>
+  </div>
+  <p class="counter-note">
+    ⚠️ <strong>注意：</strong>这些按钮目前<strong>不能点击</strong>！
+    因为 Astro 组件默认只输出静态 HTML，不会向浏览器发送 JavaScript。
+    要让按钮真正工作，我们需要将 Vue 3 组件作为 Island 嵌入——
+    这正是<a href="#vue-islands">第 03 章</a>的内容。
+  </p>
+</div>
+
+<style>
+  .counter {
+    background: #fff;
+    border: 2px dashed #ddd;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    margin: 24px 0;
+  }
+
+  .counter h3 {
+    font-size: 1.1rem;
+    color: #1a1a2e;
+    margin-bottom: 16px;
+  }
+
+  .counter-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .btn {
+    width: 40px;
+    height: 40px;
+    border: 2px solid #e0e0e0;
+    border-radius: 50%;
+    background: #fff;
+    font-size: 1.3rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s;
+    color: #333;
+  }
+
+  .btn:hover {
+    background: #f5f5f5;
+    border-color: #ccc;
+  }
+
+  /* 按钮不会真正交互，用灰色调暗示"不可用" */
+  .btn-minus:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+  }
+
+  .btn-plus:hover {
+    border-color: #52c41a;
+    color: #52c41a;
+  }
+
+  .count {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    min-width: 60px;
+  }
+
+  .counter-note {
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.6;
+    text-align: left;
+  }
+
+  .counter-note strong {
+    color: #333;
+  }
+
+  .counter-note a {
+    color: #ff6b6b;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .counter-note a:hover {
+    text-decoration: underline;
+  }
+</style>

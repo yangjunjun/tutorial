@@ -1,0 +1,38 @@
+# ============================================================
+# Netlify 部署配置
+#
+# 文档：https://docs.netlify.com/configure-builds/file-based-configuration/
+# ============================================================
+
+[build]
+  # 构建命令
+  command = "npm run build"
+  # 构建输出目录（Astro 默认输出到 dist）
+  publish = "dist"
+
+# 404 回退规则 — 将未找到的路径重定向到 404 页面
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404
+
+# 安全头配置（推荐）
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# 静态资源长期缓存
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# 图片资源缓存
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

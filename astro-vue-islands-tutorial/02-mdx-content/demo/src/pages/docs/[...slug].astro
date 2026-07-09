@@ -1,0 +1,280 @@
+---
+import { getCollection } from 'astro:content';
+
+// 为每篇文档生成静态路由
+export async function getStaticPaths() {
+  const docs = await getCollection('docs');
+  return docs.map((doc) => ({
+    params: { slug: doc.slug },
+    props: { doc, allDocs: docs },
+  }));
+}
+
+const { doc, allDocs } = Astro.props;
+const { Content } = await doc.render();
+
+// 文档侧边栏按 order 排序
+const sortedDocs = allDocs.sort((a, b) => a.data.order - b.data.order);
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{doc.data.title} | 文档</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.8;
+      color: #1a1a2e;
+      background: #f8f9fa;
+    }
+
+    .doc-layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      max-width: 1200px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+
+    /* 侧边栏导航 */
+    .doc-sidebar {
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      padding: 2rem 1.5rem;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #6366f1;
+    }
+
+    .sidebar-nav {
+      list-style: none;
+    }
+
+    .sidebar-nav li {
+      margin-bottom: 0.25rem;
+    }
+
+    .sidebar-nav a {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      color: #475569;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-nav a:hover {
+      background: #f1f5f9;
+      color: #6366f1;
+    }
+
+    .sidebar-nav a.active {
+      background: #e0e7ff;
+      color: #4338ca;
+      border-left-color: #6366f1;
+      font-weight: 600;
+    }
+
+    .sidebar-category {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #94a3b8;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin: 1.5rem 0 0.5rem 0.75rem;
+    }
+
+    .back-home {
+      display: inline-block;
+      margin-top: 2rem;
+      color: #6366f1;
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
+
+    .back-home:hover {
+      text-decoration: underline;
+    }
+
+    /* 文档内容区域 */
+    .doc-content {
+      padding: 2.5rem 3rem;
+      max-width: 780px;
+    }
+
+    .doc-breadcrumb {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 1.5rem;
+    }
+
+    .doc-breadcrumb a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .doc-breadcrumb span {
+      margin: 0 0.4rem;
+    }
+
+    .doc-description {
+      font-size: 1.1rem;
+      color: #475569;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    /* 文档正文样式 */
+    .doc-body :global(h1) {
+      font-size: 2rem;
+      margin: 2rem 0 1rem;
+      color: #0f172a;
+    }
+
+    .doc-body :global(h2) {
+      font-size: 1.4rem;
+      margin: 2rem 0 0.75rem;
+      color: #1e293b;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .doc-body :global(h3) {
+      font-size: 1.15rem;
+      margin: 1.5rem 0 0.5rem;
+      color: #334155;
+    }
+
+    .doc-body :global(p) {
+      margin-bottom: 1rem;
+    }
+
+    .doc-body :global(ul),
+    .doc-body :global(ol) {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+    }
+
+    .doc-body :global(li) {
+      margin-bottom: 0.4rem;
+    }
+
+    .doc-body :global(a) {
+      color: #6366f1;
+    }
+
+    .doc-body :global(pre) {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .doc-body :global(code) {
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    }
+
+    .doc-body :global(:not(pre) > code) {
+      background: #e0e7ff;
+      color: #4338ca;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+
+    .doc-body :global(blockquote) {
+      border-left: 4px solid #6366f1;
+      padding: 0.5rem 1rem;
+      margin: 1rem 0;
+      background: #f1f5f9;
+      color: #475569;
+      border-radius: 0 8px 8px 0;
+    }
+
+    @media (max-width: 768px) {
+      .doc-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .doc-sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .doc-content {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-layout">
+    <!-- 侧边栏 -->
+    <nav class="doc-sidebar">
+      <div class="sidebar-title">文档导航</div>
+
+      <div class="sidebar-category">指南</div>
+      <ul class="sidebar-nav">
+        {sortedDocs.map((d) => (
+          <li>
+            <a
+              href={`/docs/${d.slug}`}
+              class:list={[{ active: d.slug === doc.slug }]}
+            >
+              {d.data.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+
+      <a href="/" class="back-home">&larr; 返回首页</a>
+    </nav>
+
+    <!-- 文档正文 -->
+    <main class="doc-content">
+      <div class="doc-breadcrumb">
+        <a href="/">首页</a>
+        <span>/</span>
+        <span>文档</span>
+        <span>/</span>
+        <span>{doc.data.title}</span>
+      </div>
+
+      <h1>{doc.data.title}</h1>
+      <p class="doc-description">{doc.data.description}</p>
+
+      <div class="doc-body">
+        <Content />
+      </div>
+    </main>
+  </div>
+</body>
+</html>
