@@ -1,0 +1,9 @@
+{
+  "name": "02-monorepo-workspace-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pnpm Monorepo 工作区演示项目的根目录",
+  "scripts": {
+    "start-web": "node packages/web/index.js"
+  }
+}

@@ -1,0 +1,3 @@
+packages:
+  # 包含 packages 目录下的所有直接子目录作为工作区成员
+  - 'packages/*'
