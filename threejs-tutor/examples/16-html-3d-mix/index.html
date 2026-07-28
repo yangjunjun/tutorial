@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HTML 与 3D 混合 / HTML & 3D Mixing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+  #app { width: 100vw; height: 100vh; }
+  #info {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 380px;
+    pointer-events: none;
+  }
+  #info b { color: #7fd1ff; }
+  .lil-g { z-index: 20 !important; }
+  /* 标签层 / label layer */
+  #labels {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5;
+  }
+  .label {
+    position: absolute; left: 0; top: 0;
+    background: rgba(20,30,50,0.85); color: #e0e8f0;
+    border: 1px solid #4488cc; border-radius: 6px;
+    padding: 4px 8px; font-size: 12px; white-space: nowrap;
+    pointer-events: auto; cursor: pointer;
+    transition: opacity 0.2s, background 0.15s;
+    will-change: transform;
+  }
+  .label:hover { background: rgba(60,90,140,0.95); }
+  .label .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .label .val { color: #ffd479; font-family: ui-monospace, monospace; }
+  .label.focused { border-color: #ffaa44; box-shadow: 0 0 8px rgba(255,170,68,0.6); }
+  #status {
+    position: absolute; bottom: 12px; left: 12px; z-index: 10;
+    color: #cfe; background: rgba(0,0,0,0.6); padding: 8px 12px;
+    border-radius: 8px; font-size: 12px; font-family: ui-monospace, monospace;
+  }
+  #status b { color: #7fd1ff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="labels"></div>
+<div id="info">
+  <b>HTML 与 3D 混合 / HTML & 3D Mixing</b><br/>
+  手动投影（<code>vector.project(camera)</code>）让 HTML 标签跟随 3D 物体；遮挡时半透明；点击标签聚焦相机。<br/>
+  Manual projection: HTML labels follow 3D objects via <code>project()</code>; fade when occluded; click to focus camera.
+</div>
+<div id="status"><b>labels:</b> <span id="cnt">0</span> &nbsp;|&nbsp; <b>occluded:</b> <span id="occ">0</span> &nbsp;|&nbsp; <b>focused:</b> <span id="foc">—</span></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ---- 场景 / Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(7, 5, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1, 0);
+
+// ---- 灯光 / Lights ----
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+dir.position.set(5, 10, 7);
+dir.castShadow = true;
+dir.shadow.mapSize.set(2048, 2048);
+scene.add(dir);
+
+// ---- 地面 / Ground ----
+const grid = new THREE.GridHelper(30, 30, 0x4488ff, 0x2a3a5a);
+scene.add(grid);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0x223044, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ====== 核心：3D 物体 + HTML 标签 / Core: 3D objects + HTML labels ======
+const labelsLayer = document.getElementById('labels');
+const objects = [];   // 带标签的物体 / labeled objects
+const occluders = []; // 参与遮挡的物体 / occluder meshes
+const labels = [];    // { el, anchor, occluders }
+
+const items = [
+  { name: 'Server-A', color: 0x4fa8ff, pos: [-3, 0.8, -2], val: 'CPU 42%' },
+  { name: 'Server-B', color: 0x66dd88, pos: [ 0, 0.8, -2], val: 'CPU 71%' },
+  { name: 'Server-C', color: 0xff9966, pos: [ 3, 0.8, -2], val: 'CPU 88%' },
+  { name: 'Router-1', color: 0xcc66ff, pos: [-3, 0.8,  1], val: '1.2 Gbps' },
+  { name: 'Router-2', color: 0xffcc44, pos: [ 3, 0.8,  1], val: '0.8 Gbps' },
+  { name: 'DB-Main',  color: 0xff5566, pos: [ 0, 0.8,  2], val: '312 qps' },
+];
+
+const sharedGeo = new THREE.BoxGeometry(1.2, 1.6, 1.2);
+items.forEach((it, i) => {
+  const mesh = new THREE.Mesh(
+    sharedGeo,
+    new THREE.MeshStandardMaterial({ color: it.color, roughness: 0.5, metalness: 0.2 })
+  );
+  mesh.position.set(it.pos[0], it.pos[1], it.pos[2]);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData = { name: it.name, val: it.val, index: i };
+  scene.add(mesh);
+  objects.push(mesh);
+  occluders.push(mesh);
+
+  // 创建 HTML 标签 / create HTML label
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.innerHTML = `<span class="dot" style="background:#${it.color.toString(16).padStart(6,'0')}"></span><b>${it.name}</b> <span class="val">${it.val}</span>`;
+  labelsLayer.appendChild(el);
+
+  // 锚点：物体上方 / anchor: above object
+  const anchor = new THREE.Object3D();
+  anchor.position.set(it.pos[0], it.pos[1] + 1.4, it.pos[2]);
+  scene.add(anchor);
+
+  labels.push({ el, anchor, mesh, name: it.name });
+});
+
+// 中间一个大遮挡物，演示遮挡判断 / a big occluder in the middle to demo occlusion
+const wall = new THREE.Mesh(
+  new THREE.BoxGeometry(0.4, 3, 6),
+  new THREE.MeshStandardMaterial({ color: 0x333344, transparent: true, opacity: 0.6, roughness: 0.9 })
+);
+wall.position.set(0, 1.5, 0);
+wall.castShadow = true;
+scene.add(wall);
+occluders.push(wall);
+
+// 点击标签聚焦相机 / click label to focus camera
+let focusedIndex = -1;
+function setFocused(idx) {
+  focusedIndex = idx;
+  labels.forEach((L, i) => L.el.classList.toggle('focused', i === idx));
+  document.getElementById('foc').textContent = idx >= 0 ? labels[idx].name : '—';
+}
+labels.forEach((L, i) => {
+  L.el.addEventListener('click', () => {
+    const p = new THREE.Vector3();
+    L.mesh.getWorldPosition(p);
+    animateTarget(p);
+    setFocused(i);
+  });
+});
+
+// 平滑 target 动画 / smooth target animation
+let targetAnim = null;
+function animateTarget(to) {
+  const from = controls.target.clone();
+  targetAnim = { from, to, t0: performance.now(), dur: 600 };
+}
+function updateTargetAnim() {
+  if (!targetAnim) return;
+  const k = Math.min((performance.now() - targetAnim.t0) / targetAnim.dur, 1);
+  const e = 1 - Math.pow(1 - k, 3); // easeOutCubic
+  controls.target.lerpVectors(targetAnim.from, targetAnim.to, e);
+  if (k >= 1) targetAnim = null;
+}
+
+// ====== 手动投影 + 遮挡 / Manual projection + occlusion ======
+const worldVec = new THREE.Vector3();
+const camPos = new THREE.Vector3();
+const ocRay = new THREE.Raycaster();
+const projVec = new THREE.Vector3();
+
+const params = {
+  occlusion: true,
+  fadeOccluded: true,
+  showRayDebug: false,
+};
+
+let occludedCount = 0;
+function updateLabels() {
+  camera.getWorldPosition(camPos);
+  const w = innerWidth, h = innerHeight;
+  occludedCount = 0;
+
+  for (const L of labels) {
+    L.anchor.getWorldPosition(worldVec);
+    // 投影到 NDC / project to NDC
+    projVec.copy(worldVec).project(camera);
+    const inFront = projVec.z > -1 && projVec.z < 1;
+
+    if (!inFront) { L.el.style.display = 'none'; continue; }
+    L.el.style.display = 'block';
+
+    // 遮挡检测 / occlusion test
+    let blocked = false;
+    if (params.occlusion) {
+      const dir = worldVec.clone().sub(camPos);
+      const dist = dir.length();
+      dir.normalize();
+      ocRay.set(camPos, dir);
+      ocRay.far = dist - 0.05; // 避免命中锚点自身 / miss anchor itself
+      blocked = ocRay.intersectObjects(occluders, true).length > 0;
+    }
+    if (blocked) occludedCount++;
+
+    // NDC → 像素 / NDC → pixels
+    const x = (projVec.x * 0.5 + 0.5) * w;
+    const y = (-projVec.y * 0.5 + 0.5) * h;
+    L.el.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`;
+    L.el.style.opacity = (blocked && params.fadeOccluded) ? '0.2' : '1';
+  }
+  document.getElementById('cnt').textContent = labels.length;
+  document.getElementById('occ').textContent = occludedCount;
+}
+
+// 遮挡射线可视化（调试）/ occlusion ray visualization (debug)
+let rayDebugLine = null;
+function updateRayDebug() {
+  if (!params.showRayDebug) {
+    if (rayDebugLine) { scene.remove(rayDebugLine); rayDebugLine.geometry.dispose(); rayDebugLine = null; }
+    return;
+  }
+  // 画从相机到第一个标签锚点的射线 / ray from camera to first label anchor
+  labels[0].anchor.getWorldPosition(worldVec);
+  camera.getWorldPosition(camPos);
+  const pts = [camPos.clone(), worldVec.clone()];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  if (rayDebugLine) { scene.remove(rayDebugLine); rayDebugLine.geometry.dispose(); }
+  rayDebugLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xff00ff }));
+  scene.add(rayDebugLine);
+}
+
+// ---- GUI / Debug panel ----
+const gui = new GUI();
+gui.add(params, 'occlusion').name('遮挡检测 / Occlusion');
+gui.add(params, 'fadeOccluded').name('遮挡半透明 / Fade');
+gui.add(params, 'showRayDebug').name('遮挡射线 / Show Ray');
+gui.add({ clearFocus: () => setFocused(-1) }, 'clearFocus').name('清除聚焦 / Clear Focus');
+
+// ---- 渲染循环 / Render loop ----
+renderer.setAnimationLoop(() => {
+  updateTargetAnim();
+  controls.update();
+  updateLabels();
+  updateRayDebug();
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  // 标签层用百分比定位，无需手动 resize / label layer uses % so no manual resize
+});
+</script>
+</body>
+</html>

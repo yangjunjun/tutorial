@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>几何体与 BufferGeometry / Geometry & BufferGeometry</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    #info {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+      border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 400px;
+      pointer-events: none;
+    }
+    #info b { color: #7fd1ff; }
+    #info code { color: #ffd479; font-size: 12px; }
+    #stats { position: absolute; bottom: 12px; left: 12px; z-index: 10; color: #7fd1ff;
+             background: rgba(0,0,0,0.55); padding: 8px 12px; border-radius: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="info">
+    <b>几何体 / Geometry</b><br />
+    手写五角星 + 网格平面，可视化顶点法线。<br />
+    Hand-written star & grid plane with vertex-normal visualization.<br />
+    切换索引/非索引查看顶点数变化。/ Toggle indexed vs non-indexed.
+  </div>
+  <div id="stats"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    // ---- 场景 / Scene ----
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(3, 3, 5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.getElementById('app').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // ---- 灯光 / Lights ----
+    scene.add(new THREE.AmbientLight(0x404060, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+    dir.position.set(3, 5, 4);
+    scene.add(dir);
+
+    // ---- 网格辅助 / Grid helper ----
+    const grid = new THREE.GridHelper(10, 10, 0x4488ff, 0x2a3a5a);
+    grid.position.y = -1.5;
+    scene.add(grid);
+
+    // ====== 手写几何体函数 / Hand-written geometry functions ======
+
+    // 五角星 / five-pointed star
+    function makeStar(outerR, innerR, points) {
+      const positions = [0, 0, 0]; // 中心顶点 / center vertex
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        positions.push(Math.cos(a) * r, Math.sin(a) * r, 0);
+      }
+      const indices = [];
+      for (let i = 0; i < points * 2; i++) {
+        indices.push(0, 1 + i, 1 + ((i + 1) % (points * 2)));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      return geo;
+    }
+
+    // 网格平面 / grid plane
+    function makeGridPlane(size, divisions) {
+      const positions = [], uvs = [], indices = [];
+      const step = size / divisions, half = size / 2;
+      for (let iy = 0; iy <= divisions; iy++) {
+        for (let ix = 0; ix <= divisions; ix++) {
+          positions.push(-half + ix * step, 0, -half + iy * step);
+          uvs.push(ix / divisions, iy / divisions);
+        }
+      }
+      for (let iy = 0; iy < divisions; iy++) {
+        for (let ix = 0; ix < divisions; ix++) {
+          const a = ix + iy * (divisions + 1);
+          const b = a + 1;
+          const c = a + (divisions + 1);
+          const d = c + 1;
+          indices.push(a, c, b, b, c, d);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    // ====== 创建星形 / Create star ======
+    let starGeo = makeStar(1.5, 0.6, 5);
+    const starMat = new THREE.MeshStandardMaterial({
+      color: 0xffcc44, side: THREE.DoubleSide, flatShading: false, roughness: 0.4, metalness: 0.3
+    });
+    const starMesh = new THREE.Mesh(starGeo, starMat);
+    starMesh.position.set(0, 0.5, 0);
+    scene.add(starMesh);
+
+    // 法线辅助箭头 / normal arrow helpers
+    let normalArrows = [];
+    function showNormals(geo, mesh) {
+      normalArrows.forEach(a => scene.remove(a));
+      normalArrows = [];
+      const pos = geo.attributes.position;
+      const nor = geo.attributes.normal;
+      const used = new Set();
+      for (let i = 0; i < pos.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+        // 把局部坐标转世界坐标 / local → world
+        const worldV = v.clone().applyMatrix4(mesh.matrixWorld);
+        const n = new THREE.Vector3().fromBufferAttribute(nor, i);
+        n.transformDirection(mesh.matrixWorld);
+        const key = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+        if (used.has(key)) continue;
+        used.add(key);
+        const arrow = new THREE.ArrowHelper(n.normalize(), worldV, 0.4, 0x00ff66, 0.12, 0.06);
+        scene.add(arrow);
+        normalArrows.push(arrow);
+      }
+    }
+
+    // ====== 创建网格平面 / Create grid plane ======
+    const planeGeo = makeGridPlane(3, 3);
+    const planeMat = new THREE.MeshStandardMaterial({
+      color: 0x6688aa, side: THREE.DoubleSide, wireframe: false, roughness: 0.8
+    });
+    const planeMesh = new THREE.Mesh(planeGeo, planeMat);
+    planeMesh.rotation.x = -Math.PI / 2;
+    planeMesh.position.y = -1.4;
+    scene.add(planeMesh);
+
+    // ====== GUI / Debug panel ======
+    const params = {
+      shape: 'star',
+      points: 5,
+      outerR: 1.5,
+      innerR: 0.6,
+      indexed: true,
+      wireframe: false,
+      flatShading: false,
+      showNormals: true,
+      showPlane: true,
+    };
+
+    const gui = new GUI();
+    const fShape = gui.addFolder('星形 / Star');
+    fShape.add(params, 'points', 3, 12, 1).name('角数 / Points').onChange(rebuild);
+    fShape.add(params, 'outerR', 0.5, 3, 0.05).name('外径 / Outer R').onChange(rebuild);
+    fShape.add(params, 'innerR', 0.1, 2, 0.05).name('内径 / Inner R').onChange(rebuild);
+
+    const fGeo = gui.addFolder('几何 / Geometry');
+    fGeo.add(params, 'indexed').name('索引 / Indexed').onChange(rebuild);
+    fGeo.add(params, 'wireframe').name('线框 / Wireframe').onChange(v => { starMat.wireframe = v; planeMat.wireframe = v; });
+    fGeo.add(params, 'flatShading').name('平面着色 / Flat').onChange(v => { starMat.flatShading = v; starMat.needsUpdate = true; });
+    fGeo.add(params, 'showNormals').name('法线 / Normals').onChange(updateNormals);
+    fGeo.add(params, 'showPlane').name('显示平面 / Plane').onChange(v => { planeMesh.visible = v; });
+
+    function rebuild() {
+      const g = makeStar(params.outerR, params.innerR, params.points);
+      const final = params.indexed ? g : g.toNonIndexed();
+      starMesh.geometry.dispose();
+      starMesh.geometry = final;
+      updateStats();
+      updateNormals();
+    }
+
+    function updateNormals() {
+      if (params.showNormals) {
+        starMesh.updateMatrixWorld();
+        showNormals(starMesh.geometry, starMesh);
+      } else {
+        normalArrows.forEach(a => scene.remove(a));
+        normalArrows = [];
+      }
+    }
+
+    const statsEl = document.getElementById('stats');
+    function updateStats() {
+      const g = starMesh.geometry;
+      const posCount = g.attributes.position.count;
+      const idxCount = g.index ? g.index.count : posCount;
+      const triCount = idxCount / 3;
+      statsEl.innerHTML =
+        `<b>顶点 / Verts:</b> ${posCount} &nbsp; ` +
+        `<b>索引 / Indices:</b> ${idxCount} &nbsp; ` +
+        `<b>三角形 / Tris:</b> ${triCount}`;
+    }
+
+    updateStats();
+
+    // ---- 渲染循环 / Render loop ----
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = clock.getDelta();
+      starMesh.rotation.y += 0.4 * dt;
+      controls.update();
+      if (params.showNormals) {
+        // 法线箭头跟随旋转 / arrows follow rotation
+        updateNormals();
+      }
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

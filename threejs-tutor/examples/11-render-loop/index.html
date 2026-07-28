@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>渲染循环与帧率无关动画 / Render Loop & Frame-rate Independent Animation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    #info {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+      border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 420px;
+      pointer-events: none;
+    }
+    #info b { color: #7fd1ff; }
+    #info code { color: #ffd479; font-size: 12px; }
+    #stats {
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      color: #7fd1ff; background: rgba(0,0,0,0.55); padding: 10px 14px;
+      border-radius: 8px; font-size: 14px; font-family: monospace; text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="info">
+    <b>渲染循环 / Render Loop</b><br />
+    红立方体 vs 绿立方体：帧率无关 vs 帧率依赖。<br />
+    Red vs Green: delta-based vs frame-based.<br />
+    切换模式 / GPU 节流后观察转速差异。<br />
+    <code>rotation += speed * delta ✓</code><br />
+    <code>rotation += 0.01 ✗ (高刷更快)</code>
+  </div>
+  <div id="stats">FPS: --<br/>Delta: -- ms<br/>Mode: --</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    // ---- 场景 / Scene ----
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x12121e);
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 2, 5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.getElementById('app').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // ---- 灯光 / Lights ----
+    scene.add(new THREE.AmbientLight(0x556677, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.5);
+    dir.position.set(3, 5, 4);
+    scene.add(dir);
+
+    // ---- 网格辅助 / Grid ----
+    const grid = new THREE.GridHelper(10, 10, 0x334466, 0x222238);
+    grid.position.y = -1;
+    scene.add(grid);
+
+    // ====== 两个对比立方体 / Two comparison cubes ======
+    const angularSpeed = 1.0;  // 弧度/秒 / rad/s
+
+    // 红色：帧率依赖（错误）/ red: frame-rate dependent (wrong)
+    const cubeA = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.9, 0.9),
+      new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.5 })
+    );
+    cubeA.position.set(-1.5, 0, 0);
+    scene.add(cubeA);
+
+    // 绿色：帧率无关（正确）/ green: frame-rate independent (correct)
+    const cubeB = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.9, 0.9),
+      new THREE.MeshStandardMaterial({ color: 0x44dd66, roughness: 0.5 })
+    );
+    cubeB.position.set(1.5, 0, 0);
+    scene.add(cubeB);
+
+    // 速度指示器 / speed indicators (small bars)
+    const barA = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.05),
+      new THREE.MeshBasicMaterial({ color: 0xff4444 })
+    );
+    barA.position.set(-1.5, 0.8, 0);
+    scene.add(barA);
+    const barB = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.05),
+      new THREE.MeshBasicMaterial({ color: 0x44dd66 })
+    );
+    barB.position.set(1.5, 0.8, 0);
+    scene.add(barB);
+
+    // 标签 sprite / label sprites
+    function makeLabel(text, color) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.font = 'bold 28px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 32);
+      const tex = new THREE.CanvasTexture(c);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+      sprite.scale.set(1.5, 0.4, 1);
+      return sprite;
+    }
+    const labelA = makeLabel('Frame-based ✗', '#ff6666');
+    labelA.position.set(-1.5, 1.4, 0);
+    scene.add(labelA);
+    const labelB = makeLabel('Delta-based ✓', '#66dd66');
+    labelB.position.set(1.5, 1.4, 0);
+    scene.add(labelB);
+
+    // ====== GUI / Debug panel ======
+    const p = {
+      mode: 'delta',       // 'delta' | 'frame'
+      fpsCap: 0,           // 0 = uncapped
+      pauseOnHidden: true,
+      speed: 1.0,
+    };
+
+    const gui = new GUI();
+    gui.add(p, 'mode', { '帧率无关 / Delta': 'delta', '帧率依赖 / Frame': 'frame' })
+       .name('动画模式 / Mode');
+    gui.add(p, 'speed', 0, 3, 0.1).name('角速度 / Speed');
+    gui.add(p, 'fpsCap', { '不限 / Uncapped': 0, '30 FPS': 30, '60 FPS': 60, '120 FPS': 120 })
+       .name('帧率上限 / FPS Cap');
+    gui.add(p, 'pauseOnHidden').name('隐藏暂停 / Pause Hidden');
+
+    // ====== FPS 计数 / FPS counter ======
+    const statsEl = document.getElementById('stats');
+    let frameCount = 0;
+    let fpsAccum = 0;
+    let fps = 0;
+    let currentDelta = 0;
+
+    // ====== 帧率限制 / FPS cap ======
+    let lastRenderTime = 0;
+
+    // ====== 渲染循环 / Render loop ======
+    const clock = new THREE.Clock();
+    let running = true;
+
+    function animate() {
+      // 帧率限制 / FPS cap
+      if (p.fpsCap > 0) {
+        const now = performance.now();
+        const interval = 1000 / p.fpsCap;
+        if (now - lastRenderTime < interval - 0.5) {
+          return;  // 跳过本帧 / skip this frame
+        }
+        lastRenderTime = now;
+      }
+
+      // 限制大 delta（标签页回来时）/ clamp delta (tab return)
+      const delta = Math.min(clock.getDelta(), 0.1);
+      currentDelta = delta;
+
+      // FPS 统计 / FPS stats
+      frameCount++;
+      fpsAccum += delta;
+      if (fpsAccum >= 0.5) {
+        fps = Math.round(frameCount / fpsAccum);
+        frameCount = 0; fpsAccum = 0;
+      }
+
+      // 动画 / animation
+      if (p.mode === 'delta') {
+        cubeA.rotation.y += p.speed * delta;   // ✅ 帧率无关 / frame-rate independent
+        cubeB.rotation.y += p.speed * delta;
+      } else {
+        cubeA.rotation.y += 0.01 * p.speed * 6;  // ❌ 帧率依赖（×6 让 60fps 下速度相近）/ frame dependent
+        cubeB.rotation.y += 0.01 * p.speed * 6;
+      }
+
+      // 速度指示器跳动 / speed indicator bounce
+      const t = clock.getElapsedTime();
+      barA.position.y = 0.8 + Math.abs(Math.sin(cubeA.rotation.y * 3)) * 0.3;
+      barB.position.y = 0.8 + Math.abs(Math.sin(cubeB.rotation.y * 3)) * 0.3;
+
+      // 更新统计显示 / update stats display
+      statsEl.innerHTML =
+        `FPS: ${fps}<br/>` +
+        `Delta: ${(currentDelta * 1000).toFixed(1)} ms<br/>` +
+        `Mode: ${p.mode === 'delta' ? 'Delta ✓' : 'Frame ✗'}`;
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    renderer.setAnimationLoop(animate);
+
+    // ====== 标签页隐藏暂停 / Pause on tab hidden ======
+    document.addEventListener('visibilitychange', () => {
+      if (!p.pauseOnHidden) return;
+      if (document.hidden) {
+        renderer.setAnimationLoop(null);
+        running = false;
+        statsEl.innerHTML += '<br/><span style="color:#ffaa44">⏸ 已暂停 / Paused</span>';
+      } else {
+        clock.getDelta();  // 丢弃积攒的大 delta / discard accumulated delta
+        lastRenderTime = 0;
+        renderer.setAnimationLoop(animate);
+        running = true;
+      }
+    });
+
+    // ---- 自适应 / Resize ----
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

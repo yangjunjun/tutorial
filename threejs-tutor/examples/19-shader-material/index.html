@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShaderMaterial vs RawShaderMaterial</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:420px;pointer-events:none}
+#info b{color:#7fd1ff}
+#diff{position:absolute;top:12px;right:12px;z-index:10;color:#cfe6ff;background:rgba(0,0,0,.6);padding:10px 12px;border-radius:8px;font-size:11.5px;line-height:1.55;max-width:300px;max-height:60vh;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,monospace}
+#diff .add{color:#7fff9e}#diff .del{color:#ff8b8b}
+</style>
+</head><body><div id="app"></div>
+<div id="info"><b>ShaderMaterial vs RawShaderMaterial</b><br/>
+同一火焰波浪效果，两种材质各实现一遍，切换对比声明差异。<br/>
+Same flame-wave effect, implemented twice — toggle to compare declarations.</div>
+<div id="diff"></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0d18);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 1.2, 3.6);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 共享 uniform / shared uniforms ──────────────────────────
+const uniforms = {
+  uTime:   { value: 0 },
+  uColorA: { value: new THREE.Color(0x1a0a00) },   // 火焰底 / flame base
+  uColorB: { value: new THREE.Color(0xffaa20) },   // 火焰顶 / flame top
+  uAmp:    { value: 0.3 },
+};
+
+// ── ShaderMaterial 版（短）/ ShaderMaterial version ─────────
+const vsShader = /* glsl */`
+  varying vec2 vUv;
+  varying float vH;
+  uniform float uTime;
+  uniform float uAmp;
+  void main() {
+    vUv = uv;
+    float h = sin(position.x * 3.0 + uTime) * uAmp
+            + cos(position.y * 4.0 + uTime * 1.3) * uAmp * 0.7;
+    vH = h;
+    vec3 p = position; p.z += h;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+const fsShader = /* glsl */`
+  precision highp float;
+  varying vec2 vUv;
+  varying float vH;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uTime;
+  void main() {
+    float t = clamp(vH / 0.5 + 0.5, 0.0, 1.0);
+    vec3 col = mix(uColorA, uColorB, t);
+    // 闪烁 / flicker
+    col *= 0.8 + 0.2 * sin(uTime * 8.0 + vUv.x * 20.0);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+// ── RawShaderMaterial 版（长）/ Raw version ────────────────
+const vsRaw = /* glsl */`
+  precision highp float;
+  attribute vec3 position;
+  attribute vec2 uv;
+  uniform mat4 modelViewMatrix;
+  uniform mat4 projectionMatrix;
+  varying vec2 vUv;
+  varying float vH;
+  uniform float uTime;
+  uniform float uAmp;
+  void main() {
+    vUv = uv;
+    float h = sin(position.x * 3.0 + uTime) * uAmp
+            + cos(position.y * 4.0 + uTime * 1.3) * uAmp * 0.7;
+    vH = h;
+    vec3 p = position; p.z += h;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+const fsRaw = /* glsl */`
+  precision highp float;
+  varying vec2 vUv;
+  varying float vH;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uTime;
+  void main() {
+    float t = clamp(vH / 0.5 + 0.5, 0.0, 1.0);
+    vec3 col = mix(uColorA, uColorB, t);
+    col *= 0.8 + 0.2 * sin(uTime * 8.0 + vUv.x * 20.0);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const matShader = new THREE.ShaderMaterial({
+  uniforms, vertexShader: vsShader, fragmentShader: fsShader, side: THREE.DoubleSide,
+});
+const matRaw = new THREE.RawShaderMaterial({
+  uniforms, vertexShader: vsRaw, fragmentShader: fsRaw, side: THREE.DoubleSide,
+});
+
+const geo = new THREE.PlaneGeometry(2.6, 2.6, 80, 80);
+const mesh = new THREE.Mesh(geo, matShader);
+mesh.rotation.x = -Math.PI / 2.2;
+scene.add(mesh);
+
+// 线框轮廓便于观察位移 / wire outline to see displacement
+const wire = new THREE.Mesh(
+  geo,
+  new THREE.MeshBasicMaterial({ color: 0x3a3a5a, wireframe: true, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+);
+wire.rotation.x = mesh.rotation.x;
+wire.visible = false;
+scene.add(wire);
+
+const grid = new THREE.GridHelper(8, 16, 0x2a2a44, 0x1a1a30);
+grid.position.y = -0.8;
+scene.add(grid);
+
+// ── GUI ────────────────────────────────────────────────────
+const gui = new GUI();
+const params = { material: 'ShaderMaterial', showWire: false, amp: 0.3, speed: 1.0 };
+gui.add(params, 'material', ['ShaderMaterial', 'RawShaderMaterial']).name('材质 Material').onChange(v => {
+  mesh.material = v === 'ShaderMaterial' ? matShader : matRaw;
+  showDiff(v);
+});
+gui.add(params, 'showWire').name('线框 Wireframe').onChange(v => wire.visible = v);
+gui.add(params, 'amp', 0, 0.6, 0.01).name('振幅 Amp').onChange(v => uniforms.uAmp.value = v);
+gui.add(params, 'speed', 0, 3, 0.01).name('速度 Speed');
+
+// ── 代码差异展示 / show diff ────────────────────────────────
+const diffEl = document.getElementById('diff');
+function showDiff(which) {
+  if (which === 'ShaderMaterial') {
+    diffEl.innerHTML =
+`<span class="add">// ShaderMaterial：这些由 Three 自动注入</span>
+// (省略，无需手写)
+attribute vec3 position;   <span class="del">// 已注入</span>
+attribute vec2 uv;          <span class="del">// 已注入</span>
+uniform mat4 modelViewMatrix;<span class="del">// 已注入</span>
+uniform mat4 projectionMatrix;<span class="del">// 已注入</span>
+precision highp float;      <span class="del">// 已注入</span>
+
+void main() {
+  vUv = uv;
+  ...gl_Position = projectionMatrix
+    * modelViewMatrix * vec4(p,1.0);
+}`;
+  } else {
+    diffEl.innerHTML =
+`<span class="del">// RawShaderMaterial：必须全部手写</span>
+<span class="add">precision highp float;</span>
+<span class="add">attribute vec3 position;</span>
+<span class="add">attribute vec2 uv;</span>
+<span class="add">uniform mat4 modelViewMatrix;</span>
+<span class="add">uniform mat4 projectionMatrix;</span>
+
+void main() {
+  vUv = uv;
+  ...gl_Position = projectionMatrix
+    * modelViewMatrix * vec4(p,1.0);
+}`;
+  }
+}
+showDiff('ShaderMaterial');
+
+// ── 渲染循环 / Render loop ─────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  uniforms.uTime.value = clock.getElapsedTime() * params.speed;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

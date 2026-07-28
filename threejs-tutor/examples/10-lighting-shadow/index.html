@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>灯光与阴影 / Lighting & Shadows</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    #info {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+      border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 400px;
+      pointer-events: none;
+    }
+    #info b { color: #7fd1ff; }
+    #info code { color: #ffd479; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="info">
+    <b>阴影调试器 / Shadow Debugger</b><br />
+    方向光 + 阴影，可视化阴影相机视锥。<br />
+    Directional light + shadow, visualize shadow camera frustum.<br />
+    调 mapSize / bias / normalBias / range，观察 acne 与 peter-panning。<br />
+    <code>条纹→增大|bias| | 悬浮→减小|bias|</code>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    // ---- 场景 / Scene ----
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    scene.fog = new THREE.Fog(0x1a1a2e, 20, 50);
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(6, 5, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    document.getElementById('app').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0.5, 0);
+
+    // ---- 环境光 / Ambient + Hemisphere ----
+    scene.add(new THREE.AmbientLight(0x404050, 0.4));
+    scene.add(new THREE.HemisphereLight(0x6688aa, 0x332211, 0.3));
+
+    // ====== 方向光 + 阴影 / Directional light + shadow ======
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    dirLight.position.set(5, 8, 4);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 30;
+    dirLight.shadow.camera.left = -8;
+    dirLight.shadow.camera.right = 8;
+    dirLight.shadow.camera.top = 8;
+    dirLight.shadow.camera.bottom = -8;
+    dirLight.shadow.bias = -0.0005;
+    dirLight.shadow.normalBias = 0.02;
+    scene.add(dirLight);
+    scene.add(dirLight.target);
+
+    // 阴影相机辅助 / shadow camera helper
+    const shadowHelper = new THREE.CameraHelper(dirLight.shadow.camera);
+    scene.add(shadowHelper);
+
+    // 方向光位置辅助 / light position helper
+    const lightHelper = new THREE.DirectionalLightHelper(dirLight, 1, 0xffff00);
+    scene.add(lightHelper);
+
+    // ====== 场景物体 / Scene objects ======
+
+    // 地板 / floor (receives shadow)
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a3a, roughness: 0.95, metalness: 0.05 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // 网格辅助 / grid
+    const grid = new THREE.GridHelper(20, 20, 0x334466, 0x222238);
+    grid.position.y = 0.001;
+    scene.add(grid);
+
+    // 阴影投射物体 / shadow-casting objects
+    const objects = [];
+
+    // 中心立方体 / center cube
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 1.5, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.4, metalness: 0.3 })
+    );
+    box.position.set(0, 0.75, 0);
+    box.castShadow = true;
+    box.receiveShadow = true;
+    scene.add(box);
+    objects.push(box);
+
+    // 球体 / sphere
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xff6644, roughness: 0.3, metalness: 0.5 })
+    );
+    sphere.position.set(-2.5, 0.7, 1);
+    sphere.castShadow = true;
+    sphere.receiveShadow = true;
+    scene.add(sphere);
+    objects.push(sphere);
+
+    // 圆环 / torus
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(0.6, 0.2, 16, 48),
+      new THREE.MeshStandardMaterial({ color: 0x44dd88, roughness: 0.6, metalness: 0.2 })
+    );
+    torus.position.set(2.5, 0.4, -1);
+    torus.castShadow = true;
+    torus.receiveShadow = true;
+    scene.add(torus);
+    objects.push(torus);
+
+    // 浮空小板（展示 peter-panning）/ floating plate (peter-panning demo)
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 0.1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xddaa44, roughness: 0.5 })
+    );
+    plate.position.set(0.5, 1.5, -2);
+    plate.castShadow = true;
+    plate.receiveShadow = true;
+    scene.add(plate);
+    objects.push(plate);
+
+    // ====== GUI / Debug panel ======
+    const p = {
+      mapSize: 2048,
+      bias: -0.0005,
+      normalBias: 0.02,
+      range: 8,
+      shadowType: 'PCFSoft',
+      showHelper: true,
+      lightAngleX: 5,
+      lightAngleY: 8,
+      lightHeight: 8,
+    };
+
+    const gui = new GUI();
+
+    const fShadow = gui.addFolder('阴影 / Shadow');
+    fShadow.add(p, 'mapSize', [512, 1024, 2048, 4096]).name('贴图大小 / MapSize').onChange(v => {
+      dirLight.shadow.mapSize.set(v, v);
+      if (dirLight.shadow.map) {
+        dirLight.shadow.map.dispose();
+        dirLight.shadow.map = null;
+      }
+    });
+    fShadow.add(p, 'bias', -0.005, 0, 0.0001).name('偏移 / Bias').onChange(v => {
+      dirLight.shadow.bias = v;
+    });
+    fShadow.add(p, 'normalBias', 0, 0.1, 0.001).name('法线偏移 / NormalBias').onChange(v => {
+      dirLight.shadow.normalBias = v;
+    });
+    fShadow.add(p, 'range', 2, 20, 0.5).name('范围 / Range').onChange(v => {
+      dirLight.shadow.camera.left = -v;
+      dirLight.shadow.camera.right = v;
+      dirLight.shadow.camera.top = v;
+      dirLight.shadow.camera.bottom = -v;
+      dirLight.shadow.camera.updateProjectionMatrix();
+      shadowHelper.update();
+    });
+    fShadow.add(p, 'shadowType', ['Basic', 'PCF', 'PCFSoft', 'VSM']).name('阴影类型 / Type').onChange(v => {
+      renderer.shadowMap.type = THREE[v + 'ShadowMap'];
+      // 需要重新编译材质 / need to recompile materials
+      scene.traverse(o => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+    });
+    fShadow.add(p, 'showHelper').name('显示辅助 / Helper').onChange(v => {
+      shadowHelper.visible = v;
+      lightHelper.visible = v;
+    });
+
+    const fLight = gui.addFolder('光源 / Light');
+    fLight.add(p, 'lightAngleX', -15, 15, 0.5).name('X / 位置X').onChange(updateLight);
+    fLight.add(p, 'lightHeight', 2, 15, 0.5).name('高度 / Height').onChange(updateLight);
+    fLight.add(p, 'lightAngleY', -15, 15, 0.5).name('Z / 位置Z').onChange(updateLight);
+
+    function updateLight() {
+      dirLight.position.set(p.lightAngleX, p.lightHeight, p.lightAngleY);
+      lightHelper.update();
+    }
+
+    // ---- 渲染循环 / Render loop ----
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = clock.getDelta();
+      const t = clock.getElapsedTime();
+      // 物体轻微动画 / gentle animation
+      sphere.position.y = 0.7 + Math.sin(t * 1.5) * 0.3;
+      torus.rotation.x += 0.5 * dt;
+      torus.rotation.y += 0.3 * dt;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

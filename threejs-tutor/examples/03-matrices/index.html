@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>矩阵变换 / Matrix Transformations</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:420px;pointer-events:none}
+#info b{color:#7fd1ff}
+#info span{color:#ffd17f}
+#matrixOverlay{position:absolute;top:12px;right:12px;z-index:10;color:#7fd1ff;background:rgba(0,0,0,.6);padding:10px 12px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre;pointer-events:none}
+#hint{position:absolute;bottom:12px;left:12px;z-index:10;color:#aaa;background:rgba(0,0,0,.45);padding:6px 10px;border-radius:6px;font-size:12px}
+.lil-gui{--background-color:#1f2440;--text-color:#e0e0e0;--title-background-color:#2a3050}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="info">
+  <b>矩阵变换 / Matrix Transformations</b><br/>
+  立方体绕 pivot 公转 + 自转，演示父-子变换继承与顺序。 / Cube orbits a pivot + self-rotates; demonstrates parent-child inheritance & order.<br/>
+  <span>右侧实时显示 cube 的 matrixWorld（16 个数）。 / Right panel shows cube's matrixWorld (16 numbers) live.</span>
+</div>
+<div id="matrixOverlay">matrixWorld:\n(loading)</div>
+<div id="hint">拖拽旋转视角 / Drag to orbit · 滚轮缩放 / Scroll to zoom</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ---- 场景 / Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 14, 36);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(7, 6, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.8, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(6, 12, 8);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.left = -10;
+dirLight.shadow.camera.right = 10;
+dirLight.shadow.camera.top = 10;
+dirLight.shadow.camera.bottom = -10;
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(20, 20, 0x4488ff, 0x2a3a5a);
+scene.add(grid);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(20, 20),
+  new THREE.MeshStandardMaterial({ color: 0x12142a, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ====== 核心示例 / Core demo ======
+
+// pivot 标记 / pivot marker (origin)
+const pivotMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.15, 20, 14),
+  new THREE.MeshStandardMaterial({ color: 0xff5577, emissive: 0x331018 })
+);
+pivotMarker.castShadow = true;
+scene.add(pivotMarker);
+
+// pivot group：旋转中心 / pivot group = rotation center
+const pivot = new THREE.Group();
+scene.add(pivot);
+
+// 子立方体（公转） / child cube (orbits)
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(0.8, 0.8, 0.8),
+  new THREE.MeshStandardMaterial({ color: 0x7fd1ff, emissive: 0x113355, roughness: 0.35, metalness: 0.2 })
+);
+cube.position.set(2.5, 0.6, 0); // 轨道半径 / orbit radius
+cube.castShadow = true;
+pivot.add(cube);
+
+// cube 局部坐标轴 / cube local axes
+const cubeAxes = new THREE.AxesHelper(0.9);
+cube.add(cubeAxes);
+
+// 公转轨道线 / orbit ring
+function ringPoints(r, segs) {
+  const p = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    p.push(new THREE.Vector3(Math.cos(a) * r, 0.6, Math.sin(a) * r));
+  }
+  return p;
+}
+const orbitRing = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(ringPoints(2.5, 64)),
+  new THREE.LineBasicMaterial({ color: 0x2a5577 })
+);
+scene.add(orbitRing);
+
+// 世界坐标轴 / world axes
+const worldAxes = new THREE.AxesHelper(2);
+scene.add(worldAxes);
+
+// 一个独立的"顺序对比"立方体 / standalone cube for order comparison
+const orderCube = new THREE.Mesh(
+  new THREE.BoxGeometry(0.6, 0.6, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0xffd17f, emissive: 0x332200, roughness: 0.4, metalness: 0.2 })
+);
+orderCube.castShadow = true;
+orderCube.position.set(-4, 0.6, 3.5);
+scene.add(orderCube);
+
+// ---- 参数 / Params ----
+const params = {
+  orbitSpeed: 0.8,      // 公转角速度 / orbit angular speed
+  selfSpeed: 1.2,       // 自转角速度 / self-rotation speed
+  orbitRadius: 2.5,     // 轨道半径 / orbit radius
+  order: 'rotateThenTranslate', // 顺序对比 / order comparison
+  compareAngle: 0.6,    // 对比立方体的旋转角 / comparison rotation angle
+  showAxes: true,
+};
+
+const gui = new GUI();
+gui.add(params, 'orbitSpeed', 0, 3, 0.05).name('公转速度 orbit');
+gui.add(params, 'selfSpeed', 0, 4, 0.05).name('自转速度 self');
+gui.add(params, 'orbitRadius', 0.5, 4, 0.1).name('轨道半径 radius').onChange(v => {
+  cube.position.x = v;
+  orbitRing.geometry.setFromPoints(ringPoints(v, 64));
+});
+gui.add(params, 'order', ['rotateThenTranslate', 'translateThenRotate']).name('顺序对比 order');
+gui.add(params, 'compareAngle', 0, Math.PI * 2, 0.05).name('对比角度 angle');
+gui.add(params, 'showAxes').name('显示坐标轴 axes').onChange(v => {
+  cubeAxes.visible = worldAxes.visible = v;
+});
+
+// 矩阵格式化 / format matrix to text
+function matrixToText(M, label) {
+  const e = M.elements; // column-major / 列主序
+  // 显示为行主序更易读 / display row-major for readability
+  const rows = [];
+  for (let r = 0; r < 4; r++) {
+    const row = [];
+    for (let c = 0; c < 4; c++) {
+      const val = e[c * 4 + r];
+      row.push((val >= 0 ? ' ' : '') + val.toFixed(2));
+    }
+    rows.push(row.join('  '));
+  }
+  return `${label}:\n${rows.join('\n')}`;
+}
+
+const overlay = document.getElementById('matrixOverlay');
+
+// ---- 渲染循环 / Render loop ----
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const delta = Math.min(clock.getDelta(), 0.05);
+
+  // 公转 / orbit (rotating pivot → child orbits origin)
+  pivot.rotation.y += delta * params.orbitSpeed;
+  // 自转 / self-rotation
+  cube.rotation.x += delta * params.selfSpeed;
+  cube.rotation.y += delta * params.selfSpeed * 0.6;
+
+  pivot.updateMatrixWorld(true);
+
+  // 顺序对比立方体 / order-comparison cube
+  const T = new THREE.Matrix4().makeTranslation(-3, 0, 3.5);
+  const R = new THREE.Matrix4().makeRotationY(params.compareAngle);
+  let M;
+  if (params.order === 'rotateThenTranslate') {
+    // 先旋转再平移 = T × R：物体自转后整体平移 / rotate then translate
+    M = new THREE.Matrix4().multiplyMatrices(T, R);
+  } else {
+    // 先平移再旋转 = R × T：平移后的位置绕原点旋转 / translate then rotate (around origin)
+    M = new THREE.Matrix4().multiplyMatrices(R, T);
+  }
+  orderCube.matrixAutoUpdate = false;
+  orderCube.matrix.copy(M);
+  orderCube.matrixWorldNeedsUpdate = true;
+
+  // 显示 cube 的世界矩阵 / display cube's world matrix
+  overlay.textContent =
+    matrixToText(cube.matrixWorld, 'cube.matrixWorld') +
+    '\n\n' +
+    matrixToText(orderCube.matrix, 'orderCube.matrix') +
+    `\norder: ${params.order}`;
+
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body></html>

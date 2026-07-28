@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>WebGPU 与 TSL / WebGPU & TSL</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}#app{width:100vw;height:100vh}#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:380px;pointer-events:none}#info b{color:#7fd1ff}</style>
+</head><body><div id="app"></div>
+<div id="info"><b>WebGPU 与 TSL / WebGPU & TSL</b><br/>
+尝试 WebGPURenderer，不可用时回退 WebGLRenderer。粒子球用 TSL 节点做波动位移。<br/>
+Attempt WebGPURenderer with WebGL fallback. Particle sphere uses TSL node wave displacement.<br/>
+<span style="color:#9fd9ff">GUI 可切换后端（刷新生效）、调节波动参数。Orbit to rotate.</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/","three/nodes":"https://unpkg.com/three@0.160.0/build/three.module.nodes.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import * as Nodes from 'three/nodes';
+
+// ── 尝试 WebGPU，回退 WebGL / Attempt WebGPU, fallback WebGL ──────────
+// 注意：r160 的 WebGPURenderer 在 three/webgpu 路径下，但 unpkg 上该路径
+// 可能不完整。这里用 Node Material (three/nodes) 作为 TSL 演示主体，
+// 在 WebGLRenderer 上运行——这正是 Three.js 迁移策略：先换材质，再换后端。
+// 真正的 WebGPURenderer 切换在注释中说明。
+// NOTE: r160 WebGPURenderer lives under three/webgpu, which may be incomplete
+// on unpkg. Here we demonstrate Node Material/TSL on WebGLRenderer — exactly
+// Three.js's migration strategy. WebGPURenderer toggle is shown in comments.
+
+let renderer, backendName = 'WebGL';
+let useWebGPU = false; // 默认 WebGL / default WebGL
+
+async function initRenderer() {
+  // 尝试动态导入 WebGPURenderer / try dynamic import of WebGPURenderer
+  if (useWebGPU && navigator.gpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        const mod = await import('https://unpkg.com/three@0.160.0/build/three.webgpu.js');
+        const WebGPURenderer = mod.WebGPURenderer;
+        renderer = new WebGPURenderer({ antialias: true });
+        await renderer.init();
+        backendName = 'WebGPU';
+        return;
+      }
+    } catch (e) {
+      console.warn('WebGPU init failed, falling back to WebGL:', e);
+    }
+  }
+  // 回退 WebGL / fallback to WebGL
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  backendName = 'WebGL';
+}
+
+const app = document.getElementById('app');
+await initRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.FogExp2(0x1a1a2e, 0.04);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 2, 8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 灯光 / Lights ────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x404060, 1));
+const dl = new THREE.DirectionalLight(0xffffff, 1.5);
+dl.position.set(5, 8, 4);
+scene.add(dl);
+const pl = new THREE.PointLight(0x66ddff, 2, 20);
+pl.position.set(0, 3, 0);
+scene.add(pl);
+
+// ── TSL 波动粒子球 / TSL wave particle sphere ────────────────
+// 用 Node Material 在 WebGL 上演示 TSL 节点式表达
+// Using Node Material on WebGL to demonstrate TSL node expressions
+const sphereGeo = new THREE.IcosahedronGeometry(2, 4); // 高细分 / high detail
+const particleCount = sphereGeo.attributes.position.count;
+
+// 创建粒子材质（用 Points + NodeMaterial）/ create particle material
+const particleMaterial = new Nodes.PointsNodeMaterial();
+particleMaterial.size = 0.08;
+particleMaterial.sizeAttenuation = true;
+
+// TSL：颜色 = 位置映射到色相 / TSL: color = position mapped to hue
+const pos = Nodes.positionLocal;
+const t = Nodes.timerLocal();
+
+// 波动位移 / wave displacement: position + normal * sin(...)
+const waveAmount = Nodes.uniform(0.3, 'float');
+const waveSpeed = Nodes.uniform(1.5, 'float');
+const displacement = Nodes.sin(pos.x.mul(2).add(t.mul(waveSpeed)))
+  .add(Nodes.sin(pos.y.mul(2).add(t.mul(waveSpeed))))
+  .add(Nodes.sin(pos.z.mul(2).add(t.mul(waveSpeed))));
+particleMaterial.positionNode = pos.add(Nodes.normalLocal.mul(displacement.mul(waveAmount)));
+
+// 顶点颜色：基于位移强度 / vertex color based on displacement
+particleMaterial.colorNode = Nodes.mix(
+  Nodes.vec3(0.2, 0.4, 1.0),  // 蓝 / blue
+  Nodes.vec3(1.0, 0.3, 0.8),  // 粉 / pink
+  displacement.mul(2).add(0.5)
+);
+
+// 发光 / emissance
+particleMaterial.opacityNode = Nodes.float(0.85);
+
+const particles = new THREE.Points(sphereGeo, particleMaterial);
+scene.add(particles);
+
+// ── 中心实心球（对比）/ center solid sphere (contrast) ─────────
+const centerMat = new THREE.MeshStandardMaterial({
+  color: 0x222244, roughness: 0.2, metalness: 0.8, emissive: 0x110022,
+});
+const centerSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 2), centerMat);
+scene.add(centerSphere);
+
+// ── 环绕粒子环 / orbiting particle ring ──────────────────────
+const ringGeo = new THREE.BufferGeometry();
+const ringCount = 2000;
+const ringPos = new Float32Array(ringCount * 3);
+for (let i = 0; i < ringCount; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = 4 + Math.random() * 2;
+  ringPos[i*3] = Math.cos(a) * r;
+  ringPos[i*3+1] = (Math.random() - 0.5) * 0.5;
+  ringPos[i*3+2] = Math.sin(a) * r;
+}
+ringGeo.setAttribute('position', new THREE.BufferAttribute(ringPos, 3));
+const ringMat = new THREE.PointsMaterial({
+  color: 0x66ddff, size: 0.04, transparent: true, opacity: 0.6,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const ring = new THREE.Points(ringGeo, ringMat);
+scene.add(ring);
+
+// ── GUI ─────────────────────────────────────────────────────
+const gui = new GUI();
+const params = {
+  backend: backendName,
+  preferWebGPU: useWebGPU,
+  waveAmount: 0.3,
+  waveSpeed: 1.5,
+  rotate: true,
+  pointSize: 0.08,
+};
+
+const infoFolder = gui.addFolder('后端 Backend');
+infoFolder.add(params, 'backend').name('当前后端 Active').disable();
+infoFolder.add(params, 'preferWebGPU').name('优先 WebGPU').onChange(v => {
+  // 提示刷新 / prompt to refresh
+  const msg = v
+    ? '已设置优先 WebGPU，刷新页面生效。\nPrefer WebGPU set. Refresh page to apply.'
+    : '已设置优先 WebGL，刷新页面生效。\nPrefer WebGL set. Refresh page to apply.';
+  alert(msg);
+  useWebGPU = v;
+});
+infoFolder.open();
+
+const waveFolder = gui.addFolder('波动 Wave (TSL)');
+waveFolder.add(params, 'waveAmount', 0, 1, 0.01).name('幅度 Amount').onChange(v => waveAmount.value = v);
+waveFolder.add(params, 'waveSpeed', 0, 5, 0.01).name('速度 Speed').onChange(v => waveSpeed.value = v);
+waveFolder.add(params, 'pointSize', 0.01, 0.3, 0.01).name('粒子大小 Size').onChange(v => particleMaterial.size = v);
+waveFolder.open();
+gui.add(params, 'rotate').name('自转 Rotate');
+
+// ── 状态栏 / status bar ──────────────────────────────────────
+const statusEl = document.createElement('div');
+statusEl.style.cssText = 'position:absolute;bottom:12px;left:12px;z-index:10;color:#8f8;font-size:12px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px';
+document.body.appendChild(statusEl);
+
+const tslEl = document.createElement('div');
+tslEl.style.cssText = 'position:absolute;bottom:12px;right:12px;z-index:10;color:#9fd9ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;max-width:340px';
+tslEl.innerHTML = 'TSL: positionNode = pos + normal * sin(x*2+t*speed) * amount<br/>colorNode = mix(blue, pink, displacement)';
+document.body.appendChild(tslEl);
+
+function updateStatus() {
+  const info = renderer.info;
+  statusEl.textContent = `[${backendName}] draws=${info.render.calls} tris=${info.render.triangles} points=${info.render.points}`;
+}
+
+// ── 渲染循环 / Render loop ───────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
+  if (params.rotate) {
+    particles.rotation.y = elapsed * 0.15;
+    particles.rotation.x = elapsed * 0.08;
+    centerSphere.rotation.y = elapsed * 0.3;
+    ring.rotation.y = elapsed * 0.1;
+    pl.position.x = Math.cos(elapsed * 0.5) * 4;
+    pl.position.z = Math.sin(elapsed * 0.5) * 4;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  updateStatus();
+}
+animate();
+
+// ── resize ───────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

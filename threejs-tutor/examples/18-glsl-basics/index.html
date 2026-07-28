@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GLSL 基础 / GLSL Basics</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:400px;pointer-events:none}
+#info b{color:#7fd1ff}
+</style>
+</head><body><div id="app"></div>
+<div id="info"><b>GLSL 基础 / GLSL Basics</b><br/>
+同一平面，6 种渐进式片元效果：纯色 → UV 渐变 → 动画渐变 → 扫描线 → 圆形 → 溶解。<br/>
+One plane, 6 progressive fragment effects: solid → UV gradient → animated → scanline → circle → dissolve.<br/>
+<span style="color:#9fd9ff">主平面 + 右上小预览同步效果。拖拽旋转 / Orbit to rotate.</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ── 场景 / Scene ──────────────────────────────────────────
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x12121f);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 3.4);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 渐进式 Shader / Progressive shader ─────────────────────
+const vertexShader = /* glsl */`
+  varying vec2 vUv;
+  uniform float uTime;
+  void main() {
+    vUv = uv;
+    vec3 p = position;
+    // 轻微波浪位移让顶点着色器也参与 / gentle wave so vertex shader matters
+    p.z += sin(p.x * 6.0 + uTime) * 0.04;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+
+const fragmentShader = /* glsl */`
+  precision highp float;
+  varying vec2 vUv;
+  uniform int   uEffect;     // 0..5
+  uniform float uTime;
+  uniform float uDissolve;
+  uniform vec3  uColor;
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+
+  void main() {
+    vec3 c;
+    if (uEffect == 0) {
+      // 纯色 / solid color
+      c = uColor;
+    } else if (uEffect == 1) {
+      // UV 渐变 / UV gradient
+      c = vec3(vUv, 0.0);
+    } else if (uEffect == 2) {
+      // 时间动画渐变 / animated gradient
+      float t = 0.5 + 0.5 * sin(uTime);
+      c = vec3(vUv * t, 0.3);
+    } else if (uEffect == 3) {
+      // 扫描线 / scanline
+      float line = step(0.5, fract(vUv.y * 20.0 + uTime));
+      c = uColor * line + vec3(vUv.x * 0.2, 0.0, 0.3) * (1.0 - line);
+    } else if (uEffect == 4) {
+      // 圆形遮罩（柔边）/ circle mask with soft edge
+      float d = length(vUv - 0.5);
+      float ring = smoothstep(0.42, 0.38, d) - smoothstep(0.30, 0.26, d);
+      c = mix(vec3(0.06, 0.06, 0.12), uColor, smoothstep(0.42, 0.38, d));
+      c += vec3(1.0) * ring;
+    } else {
+      // 溶解 / dissolve
+      float h = hash(vUv * 60.0 + floor(uTime * 2.0) * 0.7);
+      if (h < uDissolve) discard;
+      c = mix(uColor, vec3(1.0, 0.8, 0.2), h);
+      // 边缘高亮 / edge glow
+      float edge = smoothstep(uDissolve, uDissolve + 0.05, h) - smoothstep(uDissolve + 0.05, uDissolve + 0.12, h);
+      c += vec3(1.0, 0.3, 0.1) * edge * 2.0;
+    }
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
+const uniforms = {
+  uEffect:  { value: 1 },
+  uTime:    { value: 0 },
+  uDissolve:{ value: 0.4 },
+  uColor:   { value: new THREE.Color(0x3aa0ff) },
+};
+
+const mat = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+const plane = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4, 64, 64), mat);
+scene.add(plane);
+
+// 第二个小平面展示效果预览 / small preview plane
+const mat2 = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+const plane2 = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0, 32, 32), mat2);
+plane2.position.set(2.0, 0.9, 0);
+scene.add(plane2);
+
+// 背板让溶解效果有衬托 / backdrop for dissolve
+const back = new THREE.Mesh(
+  new THREE.PlaneGeometry(6, 6),
+  new THREE.MeshBasicMaterial({ color: 0x0a0a14 })
+);
+back.position.z = -1;
+scene.add(back);
+
+// ── GUI ────────────────────────────────────────────────────
+const gui = new GUI();
+const params = {
+  effect: 1,
+  color: '#3aa0ff',
+  speed: 1.0,
+  dissolve: 0.4,
+};
+const effMap = {
+  '0 纯色 Solid': 0,
+  '1 UV渐变': 1,
+  '2 动画渐变': 2,
+  '3 扫描线 Scanline': 3,
+  '4 圆形 Circle': 4,
+  '5 溶解 Dissolve': 5,
+};
+// 当前效果说明 / current effect description
+const effDesc = [
+  'gl_FragColor = vec4(uColor, 1)',
+  'gl_FragColor = vec4(vUv, 0, 1)',
+  'gl_FragColor = vec4(vUv*t, 0.3, 1)  t=sin(uTime)',
+  'step(0.5, fract(vUv.y*20+uTime))',
+  'smoothstep(0.42, 0.25, length(vUv-0.5))',
+  'discard if hash(vUv) < uDissolve',
+];
+const fxLabel = document.createElement('div');
+fxLabel.style.cssText = 'position:absolute;bottom:12px;left:12px;z-index:10;color:#9fd9ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;max-width:420px';
+document.body.appendChild(fxLabel);
+function updateFxLabel(v) { fxLabel.textContent = 'fx[' + v + '] ' + effDesc[Number(v)]; }
+updateFxLabel(1);
+gui.add(params, 'effect', effMap).name('效果 Effect').onChange(v => { uniforms.uEffect.value = Number(v); updateFxLabel(v); });
+gui.addColor(params, 'color').name('颜色 Color').onChange(v => uniforms.uColor.value.set(v));
+gui.add(params, 'speed', 0, 3, 0.01).name('速度 Speed');
+gui.add(params, 'dissolve', 0, 1, 0.01).name('溶解度 Dissolve').onChange(v => uniforms.uDissolve.value = v);
+gui.add(params, 'rotate', true).name('预览旋转').onChange(() => {});
+
+// 让小预览面微转 / gently rotate preview
+let previewRot = 0;
+
+// ── 渲染循环 / Render loop ─────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  uniforms.uTime.value = clock.getElapsedTime() * params.speed;
+  previewRot += 0.01;
+  plane2.rotation.y = Math.sin(previewRot) * 0.3;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

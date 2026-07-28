@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染管线 / Render Pipeline</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:420px;pointer-events:none}
+#info b{color:#7fd1ff}
+#stage{position:absolute;bottom:12px;left:12px;z-index:10;color:#cfcfe0;background:rgba(0,0,0,.55);padding:8px 12px;border-radius:8px;font-size:12px;max-width:420px}
+</style>
+</head><body><div id="app"></div>
+<div id="info"><b>渲染管线 / Render Pipeline</b><br/>
+旋转立方体经过管线各空间变换。切换模式观察 NDC / 世界 / 视图 / 法线坐标如何被着色。<br/>
+A rotating cube shows how coordinates flow through the pipeline. Switch modes to see NDC / World / View / Normal as color.</div>
+<div id="stage">管线阶段 / Pipeline: JS→Buffer→<b>VertexShader</b>→Primitive→Raster→<b>FragmentShader</b>→Depth→Framebuffer<br/><span style="color:#9fd9ff">立方体+球体共用同一 Shader，切换空间模式观察颜色变化</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ── 场景 / Scene ──────────────────────────────────────────
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f0f1e);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(3, 2.4, 4);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 灯光（仅给线框参照用）/ Lights for reference wireframe ──
+scene.add(new THREE.AmbientLight(0x404060, 1.2));
+const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+dir.position.set(4, 6, 3);
+scene.add(dir);
+
+// ── Shader：可视化坐标空间 / Shader: visualize spaces ─────
+const vertexShader = /* glsl */`
+  varying vec3 vWorldPos;
+  varying vec3 vViewPos;
+  varying vec3 vNdc;
+  varying vec3 vNormal;
+  void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal   = normalize(mat3(modelMatrix) * normal);
+    vec4 viewPos = viewMatrix * worldPos;
+    vViewPos  = viewPos.xyz;
+    vec4 clipPos = projectionMatrix * viewPos;
+    vNdc = clipPos.xyz / clipPos.w;            // 透视除法 / perspective divide
+    gl_Position = clipPos;
+  }
+`;
+
+const fragmentShader = /* glsl */`
+  precision highp float;
+  uniform int   uMode;     // 0:NDC 1:World 2:View 3:Normal 4:ClipRaw
+  varying vec3 vWorldPos;
+  varying vec3 vViewPos;
+  varying vec3 vNdc;
+  varying vec3 vNormal;
+  void main() {
+    vec3 c;
+    if      (uMode == 0) c = vNdc * 0.5 + 0.5;      // NDC [-1,1]→[0,1]
+    else if (uMode == 1) c = vWorldPos * 0.5 + 0.5; // 世界 / world
+    else if (uMode == 2) c = vViewPos * 0.5 + 0.5;  // 视图 / view
+    else if (uMode == 3) c = vNormal * 0.5 + 0.5;   // 法线 / normal
+    else                 c = fract(vNdc * 3.0);     // 裁剪网格 / clip grid
+    // NDC 超出 [-1,1] 标记红色 / mark out-of-range NDC red
+    if (uMode == 0 && any(greaterThan(abs(vNdc), vec3(1.0)))) c = vec3(1.0, 0.15, 0.15);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
+const geo = new THREE.BoxGeometry(1.6, 1.6, 1.6, 8, 8, 8);
+const mat = new THREE.ShaderMaterial({
+  uniforms: { uMode: { value: 0 } },
+  vertexShader, fragmentShader,
+});
+const cube = new THREE.Mesh(geo, mat);
+scene.add(cube);
+
+// 第二个物体：球，用同一 shader 对比 / second object: sphere, same shader
+const sphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.7, 32, 24),
+  mat
+);
+sphere.position.set(2.4, 0, 0);
+scene.add(sphere);
+
+// 线框参照 / wireframe reference
+const wire = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.62, 1.62, 1.62)),
+  new THREE.LineBasicMaterial({ color: 0x7fd1ff, transparent: true, opacity: 0.4 })
+);
+scene.add(wire);
+
+// 坐标轴 / axes helper
+const axes = new THREE.AxesHelper(2.2);
+scene.add(axes);
+
+// 地面网格 / grid
+const grid = new THREE.GridHelper(10, 20, 0x303050, 0x202038);
+grid.position.y = -1.5;
+scene.add(grid);
+
+// 参照文字标签：标注球体 / label for sphere position
+const sphereLabel = document.createElement('div');
+sphereLabel.style.cssText = 'position:absolute;z-index:9;color:#7fd1ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.4);padding:3px 6px;border-radius:4px;pointer-events:none';
+sphereLabel.textContent = 'sphere (same shader)';
+document.body.appendChild(sphereLabel);
+
+// ── GUI ────────────────────────────────────────────────────
+const gui = new GUI();
+const params = {
+  mode: 0,
+  showWire: true,
+  showAxes: true,
+  showGrid: true,
+  rotate: true,
+  speed: 0.6,
+  wireframe: false,
+};
+const modeMap = { '0 NDC 裁剪空间': 0, '1 World 世界': 1, '2 View 视图': 2, '3 Normal 法线': 3, '4 ClipGrid': 4 };
+gui.add(params, 'mode', modeMap).name('空间模式 Mode').onChange(v => mat.uniforms.uMode.value = Number(v));
+gui.add(params, 'showWire').name('线框 Wireframe').onChange(v => wire.visible = v);
+gui.add(params, 'showAxes').name('坐标轴 Axes').onChange(v => axes.visible = v);
+gui.add(params, 'showGrid').name('网格 Grid').onChange(v => grid.visible = v);
+gui.add(params, 'wireframe').name('实心线框 WireOnly').onChange(v => mat.wireframe = v);
+gui.add(params, 'rotate').name('自转 Rotate');
+gui.add(params, 'speed', 0, 2, 0.01).name('速度 Speed');
+
+// 说明文字随模式更新 / update info text per mode
+const modeInfo = [
+  'NDC: x∈[-1,1] 红→右, y∈[-1,1] 绿→上, z∈[-1,1] 蓝→前; 超出红',
+  'World: 世界坐标映射为颜色',
+  'View: 相机视图空间坐标映射为颜色',
+  'Normal: 法线方向 → RGB (+X红 +Y绿 +Z蓝)',
+  'ClipGrid: NDC 重复网格，观察裁剪',
+];
+const infoEl = document.getElementById('info');
+function updateInfo() {
+  infoEl.innerHTML = `<b>渲染管线 / Render Pipeline</b><br/>` +
+    `旋转立方体经过管线各空间变换。切换模式观察 NDC / 世界 / 视图 / 法线坐标如何被着色。<br/>` +
+    `A rotating cube shows how coordinates flow through the pipeline.<br/>` +
+    `<b style="color:#ffd479">${modeInfo[params.mode]}</b>`;
+}
+gui.onResize?.(); 
+const origOnChange = gui.controllers[0].onChange;
+gui.controllers[0].onChange(v => { params.mode = Number(v); updateInfo(); });
+updateInfo();
+
+// ── 渲染循环 / Render loop ─────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  if (params.rotate) {
+    cube.rotation.y += dt * params.speed;
+    cube.rotation.x += dt * params.speed * 0.4;
+    wire.rotation.copy(cube.rotation);
+    sphere.rotation.y -= dt * params.speed * 0.6;
+  }
+  controls.update();
+  // 把球体世界坐标投影到屏幕，更新标签位置 / project sphere to screen for label
+  const sp = sphere.position.clone();
+  sp.project(camera);
+  sphereLabel.style.left = ((sp.x * 0.5 + 0.5) * window.innerWidth + 14) + 'px';
+  sphereLabel.style.top = ((-sp.y * 0.5 + 0.5) * window.innerHeight - 8) + 'px';
+  sphereLabel.style.display = sp.z < 1 ? 'block' : 'none';
+  renderer.render(scene, camera);
+}
+animate();
+
+// ── 自适应 / Resize ────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

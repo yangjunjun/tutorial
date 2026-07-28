@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>相机与投影 / Camera &amp; Projection</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:430px;pointer-events:none}
+#info b{color:#7fd1ff}
+#info span{color:#ffd17f}
+#info em{color:#ff9a7f;font-style:normal}
+#hint{position:absolute;bottom:12px;left:12px;z-index:10;color:#aaa;background:rgba(0,0,0,.45);padding:6px 10px;border-radius:6px;font-size:12px}
+.lil-gui{--background-color:#1f2440;--text-color:#e0e0e0;--title-background-color:#2a3050}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="info">
+  <b>相机与投影 / Camera &amp; Projection</b><br/>
+  实时切换<em>透视</em>与<em>正交</em>相机，可视化视锥。 / Live switch between <em>perspective</em> &amp; <em>orthographic</em>, with frustum visualization.<br/>
+  <span>调 fov / near / far / ortho size 观察变化。 / Tweak fov / near / far / ortho size.</span>
+</div>
+<div id="hint">拖拽旋转视角 / Drag to orbit · 滚轮缩放 / Scroll to zoom</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ---- 场景 / Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 20, 60);
+
+const aspect = innerWidth / innerHeight;
+
+// ---- 两台相机 / two cameras ----
+const perspective = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+perspective.position.set(9, 7, 12);
+
+const ortho = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 1000);
+ortho.position.copy(perspective.position);
+
+let activeCamera = perspective;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+// ---- 控制器 / Controls (绑定到活动相机 / bound to active camera) ----
+let controls = new OrbitControls(activeCamera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.5, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(6, 14, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.left = -12;
+dirLight.shadow.camera.right = 12;
+dirLight.shadow.camera.top = 12;
+dirLight.shadow.camera.bottom = -12;
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(40, 40, 0x4488ff, 0x2a3a5a);
+scene.add(grid);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0x12142a, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ====== 场景内容：一排远近不同的柱子 / scene: pillars at varying distances ======
+const pillarColors = [0x7fd1ff, 0xff77ff, 0x55ff88, 0xffd17f, 0xff9a7f, 0x9a7fff];
+const pillars = [];
+for (let i = 0; i < 6; i++) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: pillarColors[i], emissive: pillarColors[i] & 0x222222,
+    roughness: 0.4, metalness: 0.2
+  });
+  const p = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.8), mat);
+  p.position.set((i - 2.5) * 2.2, 1, 0);
+  p.castShadow = true;
+  p.receiveShadow = true;
+  scene.add(p);
+  pillars.push(p);
+}
+
+// 远近各一个球，测试 near/far 裁剪 / near & far spheres to test clipping
+const nearSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.4, 24, 16),
+  new THREE.MeshStandardMaterial({ color: 0xff5577, emissive: 0x331011 })
+);
+nearSphere.position.set(0, 0.5, 6);
+nearSphere.castShadow = true;
+scene.add(nearSphere);
+
+const farSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6, 24, 16),
+  new THREE.MeshStandardMaterial({ color: 0x77aaff, emissive: 0x112244 })
+);
+farSphere.position.set(0, 1, -15);
+farSphere.castShadow = true;
+scene.add(farSphere);
+
+// 一个参考立方体在原点 / reference cube at origin
+const refCube = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333, roughness: 0.5 })
+);
+refCube.position.set(0, 0.5, 0);
+refCube.castShadow = true;
+scene.add(refCube);
+
+// ---- CameraHelper 可视化视锥 / frustum visualization ----
+let camHelper = new THREE.CameraHelper(activeCamera);
+scene.add(camHelper);
+
+// 因为 helper 显示的是"被观察相机"，我们需要一个独立的观察相机来拍摄
+// / helper shows the "observed camera"; we need a separate observer camera to film
+const observer = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+observer.position.set(14, 11, 16);
+observer.lookAt(0, 1, 0);
+
+// 用 observer 拍摄，activeCamera 被 helper 可视化 / observer films; activeCamera is visualized by helper
+let renderCamera = observer;
+
+const obsControls = new OrbitControls(observer, renderer.domElement);
+obsControls.enableDamping = true;
+obsControls.target.set(0, 1, 0);
+
+// ---- 参数 / Params ----
+const params = {
+  mode: 'perspective',       // 透视 / 正交 / perspective or orthographic
+  fov: 50,
+  near: 0.5,
+  far: 60,
+  orthoSize: 5,              // 正交半高 / ortho half-height
+  showFrustum: true,         // 显示视锥 / show frustum
+  observerView: true,        // 用观察相机拍摄 / film with observer (so frustum is visible)
+  syncOnSwitch: true,        // 切换时同步尺寸 / sync size on switch
+};
+
+const gui = new GUI();
+gui.add(params, 'mode', ['perspective', 'orthographic']).name('相机模式 mode').onChange(onModeChange);
+gui.add(params, 'fov', 20, 110, 1).name('fov (°)').onChange(() => { if (activeCamera.isPerspectiveCamera) { activeCamera.fov = params.fov; activeCamera.updateProjectionMatrix(); syncIfEnabled(); } });
+gui.add(params, 'near', 0.05, 10, 0.05).name('near').onChange(() => { activeCamera.near = params.near; activeCamera.updateProjectionMatrix(); });
+gui.add(params, 'far', 10, 200, 1).name('far').onChange(() => { activeCamera.far = params.far; activeCamera.updateProjectionMatrix(); });
+gui.add(params, 'orthoSize', 1, 15, 0.1).name('正交半高 orthoSize').onChange(() => { if (activeCamera.isOrthographicCamera) { setOrthoSize(params.orthoSize); } });
+gui.add(params, 'showFrustum').name('显示视锥 frustum').onChange(v => camHelper.visible = v);
+gui.add(params, 'observerView').name('观察视角 observer').onChange(v => {
+  renderCamera = v ? observer : activeCamera;
+  // 切到第一人称时隐藏 helper（否则挡视野）/ hide helper in first-person
+  if (!v) camHelper.visible = false; else camHelper.visible = params.showFrustum;
+  // 启用对应的 controls / enable matching controls
+  obsControls.enabled = v;
+});
+gui.add(params, 'syncOnSwitch').name('切换同步尺寸');
+
+function setOrthoSize(halfH) {
+  const halfW = halfH * aspect;
+  ortho.left = -halfW; ortho.right = halfW;
+  ortho.top = halfH; ortho.bottom = -halfH;
+  ortho.updateProjectionMatrix();
+}
+
+function syncIfEnabled() {
+  if (!params.syncOnSwitch) return;
+  // 让正交尺寸与透视相机在 target 处看到的范围一致 / match ortho size to perspective at target
+  const dist = activeCamera.position.distanceTo(new THREE.Vector3(0, 0.5, 0));
+  const halfH = dist * Math.tan(THREE.MathUtils.degToRad(perspective.fov) / 2);
+  params.orthoSize = halfH;
+  setOrthoSize(halfH);
+  gui.controllers.forEach(c => c.updateDisplay && c.updateDisplay());
+}
+
+function onModeChange(mode) {
+  // 保留位置和朝向 / preserve position & orientation
+  const pos = activeCamera.position.clone();
+  if (mode === 'perspective') {
+    activeCamera = perspective;
+  } else {
+    activeCamera = ortho;
+    syncIfEnabled();
+  }
+  activeCamera.position.copy(pos);
+  activeCamera.near = params.near;
+  activeCamera.far = params.far;
+  activeCamera.updateProjectionMatrix();
+  rebuildHelper();
+}
+
+function rebuildHelper() {
+  scene.remove(camHelper);
+  camHelper.dispose && camHelper.dispose();
+  camHelper = new THREE.CameraHelper(activeCamera);
+  camHelper.visible = params.showFrustum && params.observerView;
+  scene.add(camHelper);
+}
+
+// 初始化正交尺寸 / init ortho size
+setOrthoSize(params.orthoSize);
+rebuildHelper();
+
+// ---- 渲染循环 / Render loop ----
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const delta = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.getElapsedTime();
+
+  // 柱子轻微呼吸 / pillars breathe slightly
+  pillars.forEach((p, i) => {
+    p.scale.y = 1 + Math.sin(elapsed * 1.5 + i * 0.6) * 0.08;
+  });
+  nearSphere.position.y = 0.5 + Math.sin(elapsed * 2) * 0.15;
+  farSphere.position.y = 1 + Math.sin(elapsed * 1.2 + 1) * 0.2;
+  refCube.rotation.y = elapsed * 0.5;
+
+  // CameraHelper 需要更新（相机参数变化后）/ update helper after camera param changes
+  camHelper.update();
+
+  // 只更新当前渲染相机的 controls / update only the rendering camera's controls
+  if (renderCamera === observer) {
+    obsControls.update();
+  }
+
+  renderer.render(scene, renderCamera);
+});
+
+// ---- 自适应 / Resize ----
+addEventListener('resize', () => {
+  const a = innerWidth / innerHeight;
+  perspective.aspect = a;
+  perspective.updateProjectionMatrix();
+  // 正交按新宽高比调整 / adjust ortho to new aspect
+  const halfW = params.orthoSize * a;
+  ortho.left = -halfW; ortho.right = halfW;
+  ortho.top = params.orthoSize; ortho.bottom = -params.orthoSize;
+  ortho.updateProjectionMatrix();
+  observer.aspect = a;
+  observer.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body></html>

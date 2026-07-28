@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>工程化与架构 / Engineering & Architecture</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}#app{width:100vw;height:100vh}#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:400px;pointer-events:none}#info b{color:#7fd1ff}</style>
+</head><body><div id="app"></div>
+<div id="info"><b>引擎架构骨架 / Engine Architecture Skeleton</b><br/>
+Experience 管理渲染器/相机/场景/时间/资源，DemoWorld 实现 init/update/resize/dispose 生命周期。<br/>
+Experience manages renderer/camera/scene/time/resources; DemoWorld implements the full lifecycle.<br/>
+<span style="color:#9fd9ff">点击 Dispose & Rebuild 验证资源释放。Orbit to rotate.</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ════════════════════════════════════════════════════════════
+// EventBus — 引擎↔UI 通信桥梁 / Engine↔UI communication bridge
+// ════════════════════════════════════════════════════════════
+class EventBus {
+  constructor() { this.listeners = new Map(); }
+  on(event, cb) {
+    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+    this.listeners.get(event).add(cb);
+    return () => this.listeners.get(event)?.delete(cb); // 返回解绑函数 / return unbind fn
+  }
+  emit(event, data) { this.listeners.get(event)?.forEach(cb => cb(data)); }
+  clear() { this.listeners.clear(); }
+}
+
+// ════════════════════════════════════════════════════════════
+// Time — 时钟与 delta / Clock & delta
+// ════════════════════════════════════════════════════════════
+class Time {
+  constructor() { this.clock = new THREE.Clock(); this.delta = 0; this.elapsed = 0; }
+  start() { this.clock.start(); }
+  tick() {
+    this.delta = Math.min(this.clock.getDelta(), 0.1); // 钳制防大跳 / clamp to prevent jumps
+    this.elapsed = this.clock.elapsedTime;
+    return { delta: this.delta, elapsed: this.elapsed };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Renderer — WebGLRenderer 封装 / renderer wrapper
+// ════════════════════════════════════════════════════════════
+class Renderer {
+  constructor(canvas) {
+    this.threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.threeRenderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  render(scene, camera) { this.threeRenderer.render(scene, camera); }
+  resize(w, h) { this.threeRenderer.setSize(w, h); }
+  get info() { return this.threeRenderer.info; }
+  dispose() { this.threeRenderer.dispose(); }
+}
+
+// ════════════════════════════════════════════════════════════
+// Camera — 相机管理 / camera management
+// ════════════════════════════════════════════════════════════
+class Camera {
+  constructor() {
+    this.threeCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.threeCamera.position.set(8, 6, 12);
+  }
+  resize(w, h) {
+    this.threeCamera.aspect = w / h;
+    this.threeCamera.updateProjectionMatrix();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// ResourceManager — 资源加载/缓存/释放 / resource manager
+// ════════════════════════════════════════════════════════════
+class ResourceManager {
+  constructor() {
+    this.geometries = new Set();
+    this.materials = new Set();
+    this.textures = new Set();
+  }
+  track(geo, mat) {
+    if (geo) this.geometries.add(geo);
+    if (mat) {
+      if (Array.isArray(mat)) mat.forEach(m => this.materials.add(m));
+      else this.materials.add(mat);
+    }
+  }
+  disposeAll() {
+    this.geometries.forEach(g => g.dispose());
+    this.materials.forEach(m => {
+      for (const k in m) { if (m[k]?.isTexture) m[k].dispose(); }
+      m.dispose();
+    });
+    this.textures.forEach(t => t.dispose());
+    this.geometries.clear();
+    this.materials.clear();
+    this.textures.clear();
+  }
+  get stats() {
+    return { geometries: this.geometries.size, materials: this.materials.size, textures: this.textures.size };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SceneModule 接口 + DemoWorld 实现 / SceneModule interface + DemoWorld
+// ════════════════════════════════════════════════════════════
+// interface SceneModule { init(); update(delta, elapsed); resize(w,h); dispose(); }
+
+class DemoWorld {
+  constructor(resources, eventBus) {
+    this.scene = new THREE.Scene();
+    this.resources = resources;
+    this.eventBus = eventBus;
+    this.cubes = [];
+    this.lights = [];
+    this.disposed = false;
+  }
+
+  async init() {
+    this.scene.background = new THREE.Color(0x1a1a2e);
+    this.scene.fog = new THREE.FogExp2(0x1a1a2e, 0.025);
+
+    // 灯光 / lights
+    const ambient = new THREE.AmbientLight(0x404060, 0.8);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(5, 8, 4);
+    this.scene.add(ambient, dirLight);
+    this.lights.push(ambient, dirLight);
+
+    // 立方体阵列 / cube grid
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.4, metalness: 0.3 });
+    this.resources.track(geo, mat);
+
+    const grid = 5;
+    for (let x = 0; x < grid; x++) {
+      for (let z = 0; z < grid; z++) {
+        const mesh = new THREE.Mesh(geo, mat); // 共享 geo+mat / shared
+        mesh.position.set((x - grid/2 + 0.5) * 2, 0, (z - grid/2 + 0.5) * 2);
+        mesh.userData = { baseY: 0, phase: (x + z) * 0.5 };
+        this.cubes.push(mesh);
+        this.scene.add(mesh);
+      }
+    }
+
+    // 监听 EventBus / listen to EventBus
+    this.unbindWireframe = this.eventBus.on('setting:wireframe', (on) => {
+      mat.wireframe = on;
+    });
+
+    this.disposed = false;
+  }
+
+  update(delta, elapsed) {
+    if (this.disposed) return;
+    for (const cube of this.cubes) {
+      cube.rotation.y += delta * 0.5;
+      cube.rotation.x += delta * 0.3;
+      cube.position.y = Math.sin(elapsed * 1.5 + cube.userData.phase) * 0.8;
+    }
+  }
+
+  resize(w, h) {
+    // 相机 aspect 由 Camera 模块处理 / camera handled by Camera module
+    // 场景特有的缩放逻辑写这里 / scene-specific resize logic here
+  }
+
+  dispose() {
+    this.disposed = true;
+    this.unbindWireframe?.(); // 解绑事件 / unbind events
+    // 递归遍历释放 / recursive traversal dispose
+    this.scene.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach(m => {
+          for (const k in m) { if (m[k]?.isTexture) m[k].dispose(); }
+          m.dispose();
+        });
+      }
+    });
+    // 清空引用 / clear references
+    this.cubes = [];
+    this.lights = [];
+    this.scene.clear();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SceneManager — 场景模块注册/切换 / scene module registry
+// ════════════════════════════════════════════════════════════
+class SceneManager {
+  constructor() { this.current = null; }
+  async switchTo(world) {
+    if (this.current) this.current.dispose();
+    this.current = world;
+    await world.init();
+  }
+  update(delta, elapsed) { this.current?.update(delta, elapsed); }
+  resize(w, h) { this.current?.resize(w, h); }
+  dispose() { this.current?.dispose(); this.current = null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// Experience — 引擎入口 / engine entry
+// ════════════════════════════════════════════════════════════
+class Experience {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.eventBus = new EventBus();
+    this.time = new Time();
+    this.renderer = new Renderer(canvas);
+    this.camera = new Camera();
+    this.resources = new ResourceManager();
+    this.sceneManager = new SceneManager();
+    this.controls = new OrbitControls(this.camera.threeCamera, canvas);
+    this.controls.enableDamping = true;
+    this.running = false;
+    this.rafId = 0;
+  }
+
+  async loadDemo() {
+    await this.sceneManager.switchTo(new DemoWorld(this.resources, this.eventBus));
+  }
+
+  start() {
+    this.running = true;
+    this.time.start();
+    const loop = () => {
+      if (!this.running) return;
+      this.rafId = requestAnimationFrame(loop);
+      const { delta, elapsed } = this.time.tick();
+      this.sceneManager.update(delta, elapsed);
+      this.controls.update();
+      if (this.sceneManager.current) {
+        this.renderer.render(this.sceneManager.current.scene, this.camera.threeCamera);
+      }
+    };
+    loop();
+  }
+
+  stop() { this.running = false; cancelAnimationFrame(this.rafId); }
+
+  resize(w, h) {
+    this.renderer.resize(w, h);
+    this.camera.resize(w, h);
+    this.sceneManager.resize(w, h);
+  }
+
+  dispose() {
+    this.stop();
+    this.sceneManager.dispose();
+    this.resources.disposeAll();
+    this.renderer.dispose();
+    this.controls.dispose();
+    this.eventBus.clear();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// 启动引擎 / Boot engine
+// ════════════════════════════════════════════════════════════
+const canvas = document.createElement('canvas');
+canvas.style.cssText = 'display:block;width:100%;height:100%';
+document.getElementById('app').appendChild(canvas);
+
+const experience = new Experience(canvas);
+await experience.loadDemo();
+experience.start();
+
+// ════════════════════════════════════════════════════════════
+// GUI — 模拟 Vue UI 层 / simulate Vue UI layer
+// ════════════════════════════════════════════════════════════
+const gui = new GUI();
+const params = { wireframe: false, rotate: true, speed: 1.0 };
+
+const uiFolder = gui.addFolder('UI → Engine (EventBus)');
+uiFolder.add(params, 'wireframe').name('线框 Wireframe').onChange(v => {
+  experience.eventBus.emit('setting:wireframe', v); // UI → Engine
+});
+uiFolder.add(params, 'speed', 0, 3, 0.01).name('速度 Speed');
+uiFolder.open();
+
+const lifecycleFolder = gui.addFolder('生命周期 Lifecycle');
+lifecycleFolder.add({
+  disposeAndRebuild: async () => {
+    // 记录销毁前状态 / record before-dispose stats
+    const before = experience.renderer.info;
+    const beforeGeo = before.memory.geometries;
+    const beforeProg = before.programs?.length || 0;
+
+    // 销毁 / dispose
+    experience.sceneManager.dispose();
+    experience.resources.disposeAll();
+
+    const after = experience.renderer.info;
+    const afterGeo = after.memory.geometries;
+    logEvent(`Dispose: geometries ${beforeGeo} → ${afterGeo}, programs ${beforeProg} → ${after.programs?.length || 0}`);
+
+    // 重建 / rebuild
+    await experience.loadDemo();
+    logEvent('Rebuild: DemoWorld re-initialized');
+  }
+}, 'disposeAndRebuild').name('🔄 Dispose & Rebuild');
+lifecycleFolder.add({
+  fullDispose: () => {
+    experience.dispose();
+    logEvent('Full dispose: engine stopped, renderer disposed');
+  }
+}, 'fullDispose').name('⛔ Full Dispose');
+lifecycleFolder.open();
+
+// ════════════════════════════════════════════════════════════
+// 状态面板 / Status panel
+// ════════════════════════════════════════════════════════════
+const statusEl = document.createElement('div');
+statusEl.style.cssText = 'position:absolute;bottom:12px;left:12px;z-index:10;color:#8f8;font-size:12px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.6);padding:8px 12px;border-radius:6px;line-height:1.7;min-width:280px';
+document.body.appendChild(statusEl);
+
+const eventLogEl = document.createElement('div');
+eventLogEl.style.cssText = 'position:absolute;bottom:12px;right:12px;z-index:10;color:#9fd9ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;max-width:300px;max-height:120px;overflow:hidden';
+document.body.appendChild(eventLogEl);
+
+const eventLog = [];
+function logEvent(msg) {
+  const time = new Date().toLocaleTimeString();
+  eventLog.unshift(`[${time}] ${msg}`);
+  if (eventLog.length > 5) eventLog.pop();
+  eventLogEl.innerHTML = '<b>事件日志 Event Log:</b><br/>' + eventLog.join('<br/>');
+}
+
+function updateStatus() {
+  const info = experience.renderer.info;
+  const res = experience.resources.stats;
+  const worldName = experience.sceneManager.current?.constructor.name || 'None';
+  statusEl.innerHTML =
+    `<b style="color:#7fd1ff">Experience Engine</b><br/>` +
+    `World: ${worldName} | Running: ${experience.running}<br/>` +
+    `Draws: ${info.render.calls} | Tris: ${info.render.triangles.toLocaleString()}<br/>` +
+    `GPU Geos: ${info.memory.geometries} | Texs: ${info.memory.textures}<br/>` +
+    `Programs: ${info.programs?.length || 0} | ResMgr: geo=${res.geometries} mat=${res.materials}`;
+}
+
+// 覆盖 DemoWorld.update 以应用 speed / override update to apply speed
+const origUpdate = DemoWorld.prototype.update;
+DemoWorld.prototype.update = function(delta, elapsed) {
+  if (this.disposed) return;
+  for (const cube of this.cubes) {
+    cube.rotation.y += delta * 0.5 * params.speed;
+    cube.rotation.x += delta * 0.3 * params.speed;
+    cube.position.y = Math.sin(elapsed * 1.5 * params.speed + cube.userData.phase) * 0.8;
+  }
+};
+
+// 状态更新循环 / status update loop
+setInterval(updateStatus, 200);
+logEvent('Engine started: DemoWorld initialized');
+
+// ════════════════════════════════════════════════════════════
+// resize
+// ════════════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  experience.resize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

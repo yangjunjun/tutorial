@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>后处理 / Postprocessing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#05050a;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:420px;pointer-events:none}
+#info b{color:#7fd1ff}
+</style>
+</head><body><div id="app"></div>
+<div id="info"><b>后处理 Bloom / Postprocessing</b><br/>
+发光立方体场景，EffectComposer + RenderPass + UnrealBloomPass + OutputPass。<br/>
+切换直接渲染 / Composer，调节辉光强度、半径、阈值、曝光。<br/>
+Emissive-cube scene; toggle direct render vs composer; tweak bloom strength / radius / threshold / exposure.<br/>
+<span style="color:#9fd9ff">底部状态栏实时显示后处理参数。Orbit to rotate.</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// 后处理在线性空间工作，色调映射交给 OutputPass / let OutputPass handle tonemapping
+renderer.toneMapping = THREE.NoToneMapping;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05050a);
+scene.fog = new THREE.FogExp2(0x05050a, 0.08);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(4, 3, 6);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 发光立方体 / emissive cubes ─────────────────────────────
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+const colors = [0xff3300, 0x00aaff, 0x00ff66, 0xffcc00, 0xff00cc];
+const cubes = [];
+for (let i = 0; i < colors.length; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: colors[i] });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat);
+  const a = (i / colors.length) * Math.PI * 2;
+  mesh.position.set(Math.cos(a) * 2.2, 0.4, Math.sin(a) * 2.2);
+  mesh.userData = { baseY: mesh.position.y, phase: i };
+  cubeGroup.add(mesh);
+  cubes.push(mesh);
+}
+
+// 发光环形粒子 / glowing ring particles
+const ringGeo = new THREE.BufferGeometry();
+const ringCount = 60;
+const ringPos = new Float32Array(ringCount * 3);
+for (let i = 0; i < ringCount; i++) {
+  const a = (i / ringCount) * Math.PI * 2;
+  ringPos[i * 3] = Math.cos(a) * 3.5;
+  ringPos[i * 3 + 1] = 0.5 + Math.sin(a * 3) * 0.4;
+  ringPos[i * 3 + 2] = Math.sin(a) * 3.5;
+}
+ringGeo.setAttribute('position', new THREE.BufferAttribute(ringPos, 3));
+const ringMat = new THREE.PointsMaterial({
+  color: 0x66ddff, size: 0.15, sizeAttenuation: true,
+  blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+});
+const ring = new THREE.Points(ringGeo, ringMat);
+scene.add(ring);
+
+// 暗色地面与中心物体（不发光，用于对比）/ dark ground + center (non-emissive for contrast)
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.6;
+scene.add(ground);
+
+const center = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(0.9, 1),
+  new THREE.MeshStandardMaterial({ color: 0x202028, roughness: 0.3, metalness: 0.7 })
+);
+scene.add(center);
+
+scene.add(new THREE.AmbientLight(0x222233, 1));
+const dl = new THREE.DirectionalLight(0xffffff, 0.6);
+dl.position.set(5, 8, 4);
+scene.add(dl);
+
+// ── EffectComposer ────────────────────────────────────────
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  1.2,    // strength
+  0.4,    // radius
+  0.6,    // threshold
+);
+composer.addPass(bloomPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
+
+// ── GUI ────────────────────────────────────────────────────
+const gui = new GUI();
+const params = {
+  useComposer: true,
+  bloom: true,
+  strength: 1.2,
+  radius: 0.4,
+  threshold: 0.6,
+  rotate: true,
+  exposure: 1.0,
+};
+const folder = gui.addFolder('后处理 Postprocessing');
+folder.add(params, 'useComposer').name('后处理 Composer');
+folder.add(params, 'bloom').name('开启 Bloom').onChange(v => bloomPass.enabled = v);
+folder.add(params, 'strength', 0, 4, 0.01).name('强度 Strength').onChange(v => bloomPass.strength = v);
+folder.add(params, 'radius', 0, 1.5, 0.01).name('半径 Radius').onChange(v => bloomPass.radius = v);
+folder.add(params, 'threshold', 0, 2, 0.01).name('阈值 Threshold').onChange(v => bloomPass.threshold = v);
+folder.add(params, 'exposure', 0, 3, 0.01).name('曝光 Exposure').onChange(v => renderer.toneMappingExposure = v);
+folder.open();
+gui.add(params, 'rotate').name('自转 Rotate');
+
+// 状态指示 / status indicator
+const statusEl = document.createElement('div');
+statusEl.style.cssText = 'position:absolute;bottom:12px;left:12px;z-index:10;color:#8f8;font-size:12px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px';
+document.body.appendChild(statusEl);
+
+// Pass 链指示 / pass chain indicator
+const chainEl = document.createElement('div');
+chainEl.style.cssText = 'position:absolute;bottom:12px;right:12px;z-index:10;color:#9fd9ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px';
+chainEl.textContent = 'RenderPass → UnrealBloomPass → OutputPass';
+document.body.appendChild(chainEl);
+
+function updateStatus() {
+  statusEl.textContent = params.useComposer
+    ? `[Composer] bloom=${params.bloom?'ON':'off'} str=${params.strength.toFixed(2)} thr=${params.threshold.toFixed(2)}`
+    : `[Direct Render] no postprocessing`;
+}
+
+// ── 渲染循环 / Render loop ─────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  if (params.rotate) {
+    cubeGroup.rotation.y = t * 0.4;
+    center.rotation.y = t * 0.3;
+    center.rotation.x = t * 0.2;
+    for (const c of cubes) {
+      c.position.y = c.userData.baseY + Math.sin(t * 2 + c.userData.phase) * 0.3;
+      c.rotation.x = t * (0.5 + c.userData.phase * 0.1);
+    }
+    ring.rotation.y = t * 0.15;
+  }
+  controls.update();
+  updateStatus();
+  if (params.useComposer) composer.render();
+  else renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

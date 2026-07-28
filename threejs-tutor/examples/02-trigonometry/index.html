@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>三角函数 / Trigonometry</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}
+#app{width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:420px;pointer-events:none}
+#info b{color:#7fd1ff}
+#info span{color:#ffd17f}
+#hint{position:absolute;bottom:12px;left:12px;z-index:10;color:#aaa;background:rgba(0,0,0,.45);padding:6px 10px;border-radius:6px;font-size:12px}
+.lil-gui{--background-color:#1f2440;--text-color:#e0e0e0;--title-background-color:#2a3050}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="info">
+  <b>三角函数 / Trigonometry</b><br/>
+  圆周 · 椭圆 · 波浪 · 呼吸 · 螺旋 · 相机环绕。 / Circle · ellipse · wave · breathing · spiral · camera orbit.<br/>
+  <span>调节 GUI 的 speed / radius / amplitude 实时观察。 / Tweak speed / radius / amplitude in GUI.</span>
+</div>
+<div id="hint">拖拽旋转视角 / Drag to orbit · 滚轮缩放 / Scroll to zoom</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ---- 场景 / Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 16, 38);
+
+// ---- 相机 / Camera ----
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(9, 7, 11);
+
+// ---- 渲染器 / Renderer ----
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+// ---- 控制器 / Controls ----
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.6, 0);
+
+// ---- 灯光 / Lights ----
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(6, 12, 8);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.left = -12;
+dirLight.shadow.camera.right = 12;
+dirLight.shadow.camera.top = 12;
+dirLight.shadow.camera.bottom = -12;
+scene.add(dirLight);
+
+// ---- 地面 / Ground ----
+const grid = new THREE.GridHelper(20, 20, 0x4488ff, 0x2a3a5a);
+scene.add(grid);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(20, 20),
+  new THREE.MeshStandardMaterial({ color: 0x12142a, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.001;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ====== 核心示例 / Core demo ======
+
+function makeBall(color, emissive = 0x000000, r = 0.28) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(r, 28, 20),
+    new THREE.MeshStandardMaterial({ color, emissive, roughness: 0.35, metalness: 0.15 })
+  );
+  m.castShadow = true;
+  return m;
+}
+
+// 1. 圆周运动球 / circular motion ball
+const circleBall = makeBall(0x7fd1ff, 0x113355);
+scene.add(circleBall);
+const circleRing = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(makeCirclePoints(1, 64)),
+  new THREE.LineBasicMaterial({ color: 0x2a5577 })
+);
+scene.add(circleRing);
+
+// 2. 椭圆运动球 / elliptical motion ball
+const ellipseBall = makeBall(0xff77ff, 0x330833);
+scene.add(ellipseBall);
+const ellipseRing = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(makeEllipsePoints(1, 1, 64)),
+  new THREE.LineBasicMaterial({ color: 0x552a55 })
+);
+scene.add(ellipseRing);
+
+// 3. 波浪队列 / wave train
+const waveBalls = [];
+const waveCount = 9;
+for (let i = 0; i < waveCount; i++) {
+  const b = makeBall(0x55ff88, 0x114422, 0.22);
+  scene.add(b);
+  waveBalls.push(b);
+}
+// 波浪基线 / wave baseline
+const waveBase = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(
+    Array.from({ length: 60 }, (_, i) => new THREE.Vector3((i / 59 - 0.5) * 7.2, 0.5, -4))
+  ),
+  new THREE.LineBasicMaterial({ color: 0x2a4a3a })
+);
+scene.add(waveBase);
+
+// 4. 呼吸立方体 / breathing cube
+const breathCube = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0xffd17f, emissive: 0x332200, roughness: 0.4, metalness: 0.2 })
+);
+breathCube.position.set(-3.5, 1, 3);
+breathCube.castShadow = true;
+scene.add(breathCube);
+
+// 5. 螺旋球 / spiral ball
+const spiralBall = makeBall(0xff9a7f, 0x331a10, 0.24);
+scene.add(spiralBall);
+const spiralLine = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(makeSpiralPoints(120)),
+  new THREE.LineBasicMaterial({ color: 0x553a2a })
+);
+scene.add(spiralLine);
+
+// 6. 相机环绕标记 / orbit indicator
+const orbitRing = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(makeCirclePoints(10, 64)),
+  new THREE.LineBasicMaterial({ color: 0x333344 })
+);
+orbitRing.rotation.x = Math.PI / 2;
+scene.add(orbitRing);
+
+// ---- 参数 / Params ----
+const params = {
+  speed: 1.0,           // 角速度 / angular velocity
+  radius: 1.6,          // 圆周半径 / circle radius
+  radiusX: 1.6,         // 椭圆 X / ellipse X
+  radiusZ: 0.9,         // 椭圆 Z / ellipse Z
+  amplitude: 0.5,       // 波浪振幅 / wave amplitude
+  waveSpeed: 2.0,       // 波浪频率 / wave frequency
+  cameraOrbit: false,   // 相机环绕 / camera orbit
+  showRings: true,      // 显示参考轨道 / show reference rings
+};
+
+const gui = new GUI();
+gui.add(params, 'speed', 0.1, 3, 0.05).name('角速度 speed');
+gui.add(params, 'radius', 0.3, 3, 0.05).name('圆周半径 radius').onChange(updateRings);
+gui.add(params, 'radiusX', 0.3, 3, 0.05).name('椭圆 X').onChange(updateRings);
+gui.add(params, 'radiusZ', 0.3, 3, 0.05).name('椭圆 Z').onChange(updateRings);
+gui.add(params, 'amplitude', 0.1, 1.2, 0.05).name('波浪振幅 amplitude');
+gui.add(params, 'waveSpeed', 0.5, 5, 0.1).name('波浪频率 waveSpeed');
+gui.add(params, 'cameraOrbit').name('相机环绕 camera orbit');
+gui.add(params, 'showRings').name('显示参考轨道 rings').onChange(v => {
+  circleRing.visible = ellipseRing.visible = spiralLine.visible = waveBase.visible = orbitRing.visible = v;
+});
+
+function makeCirclePoints(r, segs) {
+  const pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a) * r, 0.5, Math.sin(a) * r));
+  }
+  return pts;
+}
+function makeEllipsePoints(rx, rz, segs) {
+  const pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a) * rx, 0.5, Math.sin(a) * rz));
+  }
+  return pts;
+}
+function makeSpiralPoints(segs) {
+  const pts = [];
+  for (let i = 0; i < segs; i++) {
+    const t = i * 0.15;
+    const r = t * 0.25;
+    pts.push(new THREE.Vector3(Math.cos(t * 1.5) * r, ((t * 0.15) % 4) + 0.3, Math.sin(t * 1.5) * r));
+  }
+  return pts;
+}
+function updateRings() {
+  circleRing.geometry.setFromPoints(makeCirclePoints(params.radius, 64));
+  ellipseRing.geometry.setFromPoints(makeEllipsePoints(params.radiusX, params.radiusZ, 64));
+}
+
+updateRings();
+
+// ---- 渲染循环 / Render loop ----
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const delta = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.getElapsedTime();
+  const t = elapsed * params.speed;
+
+  // 1. 圆周运动 / circular motion: x = cos(t)·r, z = sin(t)·r
+  circleBall.position.set(
+    Math.cos(t) * params.radius,
+    0.5,
+    Math.sin(t) * params.radius
+  );
+
+  // 2. 椭圆运动 / elliptical motion: different radii per axis
+  ellipseBall.position.set(
+    Math.cos(t) * params.radiusX,
+    0.5,
+    Math.sin(t) * params.radiusZ
+  );
+
+  // 3. 波浪队列 / wave train: phase offset per ball
+  const wt = elapsed * params.waveSpeed;
+  waveBalls.forEach((b, i) => {
+    b.position.x = (i - (waveCount - 1) / 2) * 0.8;
+    b.position.y = 0.5 + Math.sin(i * 0.6 - wt) * params.amplitude;
+    b.position.z = -4;
+  });
+
+  // 4. 呼吸缩放 / breathing scale
+  breathCube.scale.setScalar(1 + Math.sin(elapsed * 2) * 0.2);
+  breathCube.rotation.y = elapsed * 0.5;
+
+  // 5. 螺旋上升 / spiral: radius grows with t, wraps around
+  const st = elapsed * params.speed;
+  const sr = (st * 0.25) % 2.2;
+  spiralBall.position.set(
+    Math.cos(st * 1.5) * sr,
+    ((st * 0.15) % 4) + 0.3,
+    Math.sin(st * 1.5) * sr
+  );
+
+  // 6. 相机环绕 / camera orbit
+  if (params.cameraOrbit) {
+    controls.enabled = false;
+    const cr = 11;
+    camera.position.x = Math.cos(elapsed * 0.4) * cr;
+    camera.position.z = Math.sin(elapsed * 0.4) * cr;
+    camera.position.y = 7;
+    camera.lookAt(0, 0.6, 0);
+  } else {
+    controls.enabled = true;
+    controls.update();
+  }
+
+  renderer.render(scene, camera);
+});
+
+// ---- 自适应 / Resize ----
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body></html>

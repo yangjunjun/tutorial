@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Controls / 相机控制器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+  #app { width: 100vw; height: 100vh; }
+  #info {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 400px;
+    pointer-events: none;
+  }
+  #info b { color: #7fd1ff; }
+  #info code { color: #ffd479; }
+  .lil-g { z-index: 20 !important; }
+  #status {
+    position: absolute; bottom: 12px; left: 12px; z-index: 10;
+    color: #cfe; background: rgba(0,0,0,0.6); padding: 8px 12px;
+    border-radius: 8px; font-size: 12px; font-family: ui-monospace, monospace;
+  }
+  #status b { color: #7fd1ff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="info">
+  <b>Controls / 相机控制器</b><br/>
+  手写轨道相机（球坐标 + 阻尼）vs 官方 OrbitControls 对比。<br/>
+  Hand-written orbit (spherical + damping) vs official OrbitControls side by side.
+  <br/><br/>
+  <b>左键拖</b>旋转 · <b>滚轮</b>缩放 · <b>右键拖</b>平移（仅 OrbitControls）/ <b>L-drag</b> rotate · <b>wheel</b> zoom · <b>R-drag</b> pan (OrbitControls only).
+</div>
+<div id="status"><b>active:</b> <span id="act">Custom</span> &nbsp;|&nbsp; r=<span id="r">0</span> θ=<span id="th">0</span> φ=<span id="ph">0</span></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+// ---- 场景 / Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 20, 40);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(6, 5, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+// ---- 灯光 / Lights ----
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+dir.position.set(5, 10, 7);
+dir.castShadow = true;
+dir.shadow.mapSize.set(2048, 2048);
+scene.add(dir);
+
+// ---- 地面与网格 / Ground + grid ----
+const grid = new THREE.GridHelper(30, 30, 0x4488ff, 0x2a3a5a);
+scene.add(grid);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0x223044, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---- 展示物体：一些彩色立柱 / Display objects: colored pillars ----
+for (let i = 0; i < 5; i++) {
+  for (let j = 0; j < 5; j++) {
+    const h = 0.5 + ((i * 7 + j * 3) % 5) * 0.6;
+    const hue = (i / 5 + j / 10);
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, h, 0.8),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, 0.6, 0.55), roughness: 0.5 })
+    );
+    mesh.position.set((i - 2) * 1.5, h / 2, (j - 2) * 1.5);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
+}
+// 中心标志物 / Center marker
+const center = new THREE.Mesh(
+  new THREE.SphereGeometry(0.3, 24, 16),
+  new THREE.MeshStandardMaterial({ color: 0xff5566, emissive: 0x441111 })
+);
+center.position.set(0, 1, 0);
+center.castShadow = true;
+scene.add(center);
+
+// target 可视化 / target visualizer
+const targetHelper = new THREE.Mesh(
+  new THREE.SphereGeometry(0.12, 12, 8),
+  new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true })
+);
+scene.add(targetHelper);
+
+// ====== 手写轨道相机 / Hand-written orbit camera ======
+class SimpleOrbit {
+  constructor(cam, dom) {
+    this.camera = cam; this.dom = dom;
+    this.target = new THREE.Vector3(0, 1, 0);
+    this.spherical = new THREE.Spherical(10, Math.PI / 3, Math.PI / 4);
+    this.targetSpherical = this.spherical.clone();
+    this.enableDamping = true;
+    this.dampingFactor = 0.1;
+    this.rotateSpeed = 0.005;
+    this.zoomSpeed = 0.001;
+    this.minDistance = 2; this.maxDistance = 30;
+    this.minPolarAngle = 0.1; this.maxPolarAngle = Math.PI - 0.1;
+    this.enabled = true;
+    this._bind();
+  }
+  _bind() {
+    let down = false, lx = 0, ly = 0, button = 0;
+    this.dom.addEventListener('pointerdown', e => {
+      if (!this.enabled) return;
+      down = true; button = e.button; lx = e.clientX; ly = e.clientY;
+      this.dom.setPointerCapture(e.pointerId);
+    });
+    this.dom.addEventListener('pointerup', e => { down = false; });
+    this.dom.addEventListener('pointermove', e => {
+      if (!down || !this.enabled) return;
+      const dx = e.clientX - lx, dy = e.clientY - ly;
+      lx = e.clientX; ly = e.clientY;
+      if (button === 0) {
+        // 左键旋转 / left rotate
+        this.targetSpherical.theta -= dx * this.rotateSpeed;
+        this.targetSpherical.phi = THREE.MathUtils.clamp(
+          this.targetSpherical.phi - dy * this.rotateSpeed,
+          this.minPolarAngle, this.maxPolarAngle);
+      } else if (button === 2) {
+        // 右键平移 target / right pan target (screen-ish)
+        const panScale = this.spherical.radius * 0.0008;
+        const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1);
+        this.target.addScaledVector(right, -dx * panScale);
+        this.target.addScaledVector(up,   dy * panScale);
+        this.targetSpherical.radius = this.spherical.radius; // keep
+      }
+    });
+    this.dom.addEventListener('wheel', e => {
+      if (!this.enabled) return;
+      this.targetSpherical.radius = THREE.MathUtils.clamp(
+        this.targetSpherical.radius * (1 + e.deltaY * this.zoomSpeed),
+        this.minDistance, this.maxDistance);
+      e.preventDefault();
+    }, { passive: false });
+    this.dom.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  update() {
+    if (this.enableDamping) {
+      const f = this.dampingFactor;
+      this.spherical.theta  += (this.targetSpherical.theta  - this.spherical.theta)  * f;
+      this.spherical.phi    += (this.targetSpherical.phi    - this.spherical.phi)    * f;
+      this.spherical.radius += (this.targetSpherical.radius - this.spherical.radius) * f;
+    } else {
+      this.spherical.copy(this.targetSpherical);
+    }
+    const off = new THREE.Vector3().setFromSpherical(this.spherical);
+    this.camera.position.copy(this.target).add(off);
+    this.camera.lookAt(this.target);
+  }
+  reset() {
+    this.target.set(0, 1, 0);
+    this.spherical.set(10, Math.PI / 3, Math.PI / 4);
+    this.targetSpherical.copy(this.spherical);
+  }
+}
+
+const customOrbit = new SimpleOrbit(camera, renderer.domElement);
+
+// 官方 OrbitControls（默认禁用，切换对比）/ Official OrbitControls (disabled by default)
+const orbitControls = new OrbitControls(camera, renderer.domElement);
+orbitControls.enableDamping = true;
+orbitControls.target.set(0, 1, 0);
+orbitControls.enabled = false; // 默认用手写 / default to custom
+
+// ---- GUI / Debug panel ----
+const gui = new GUI();
+const params = {
+  mode: 'Custom',
+  enableDamping: true,
+  dampingFactor: 0.1,
+  minPolar: 0.1,
+  maxPolar: Math.PI - 0.1,
+  minDistance: 2,
+  maxDistance: 30,
+  showTarget: true,
+  reset: () => { customOrbit.reset(); orbitControls.target.set(0,1,0); },
+};
+gui.add(params, 'mode', ['Custom', 'OrbitControls']).name('控制器 / Mode').onChange(v => {
+  if (v === 'Custom') { customOrbit.enabled = true; orbitControls.enabled = false; }
+  else { customOrbit.enabled = false; orbitControls.enabled = true; }
+  document.getElementById('act').textContent = v;
+});
+gui.add(params, 'enableDamping').name('阻尼 / Damping').onChange(v => {
+  customOrbit.enableDamping = v; orbitControls.enableDamping = v;
+});
+gui.add(params, 'dampingFactor', 0.01, 0.3, 0.01).name('阻尼系数 / Damping').onChange(v => {
+  customOrbit.dampingFactor = v; orbitControls.dampingFactor = v;
+});
+gui.add(params, 'minPolar', 0.05, 1.5, 0.01).name('最小极角 / Min Polar').onChange(v => {
+  customOrbit.minPolarAngle = v; orbitControls.minPolarAngle = v;
+});
+gui.add(params, 'maxPolar', Math.PI - 1.5, Math.PI - 0.05, 0.01).name('最大极角 / Max Polar').onChange(v => {
+  customOrbit.maxPolarAngle = v; orbitControls.maxPolarAngle = v;
+});
+gui.add(params, 'minDistance', 1, 5, 0.1).name('最小距离 / Min Dist').onChange(v => {
+  customOrbit.minDistance = v; orbitControls.minDistance = v;
+});
+gui.add(params, 'maxDistance', 10, 60, 1).name('最大距离 / Max Dist').onChange(v => {
+  customOrbit.maxDistance = v; orbitControls.maxDistance = v;
+});
+gui.add(params, 'showTarget').name('显示 target / Show Target');
+gui.add(params, 'reset').name('重置 / Reset');
+
+// 同步 target：当用 OrbitControls 时把 target 同步给 customOrbit，反之亦然
+// sync target between the two controllers
+
+// ---- 状态显示 / Status ----
+const rEl = document.getElementById('r');
+const thEl = document.getElementById('th');
+const phEl = document.getElementById('ph');
+
+// ---- 渲染循环 / Render loop ----
+renderer.setAnimationLoop(() => {
+  if (params.mode === 'Custom') {
+    customOrbit.update();
+    // 同步 target 给官方控制器 / sync target to official
+    orbitControls.target.copy(customOrbit.target);
+  } else {
+    orbitControls.update();
+    customOrbit.target.copy(orbitControls.target);
+  }
+  // target 可视化 / target viz
+  targetHelper.visible = params.showTarget;
+  const t = params.mode === 'Custom' ? customOrbit.target : orbitControls.target;
+  targetHelper.position.copy(t);
+  // 显示球坐标 / show spherical
+  const s = customOrbit.spherical;
+  rEl.textContent = s.radius.toFixed(2);
+  thEl.textContent = (s.theta * 180 / Math.PI).toFixed(1) + '°';
+  phEl.textContent = (s.phi * 180 / Math.PI).toFixed(1) + '°';
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

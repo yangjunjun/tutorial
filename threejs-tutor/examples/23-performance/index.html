@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>性能优化 / Performance</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:system-ui,sans-serif}#app{width:100vw;height:100vh}#info{position:absolute;top:12px;left:12px;z-index:10;color:#e0e0e0;background:rgba(0,0,0,.55);padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:400px;pointer-events:none}#info b{color:#7fd1ff}</style>
+</head><body><div id="app"></div>
+<div id="info"><b>性能对比 / Performance Comparison</b><br/>
+三种方式渲染 N 个立方体：独立 Mesh vs 合并 Geometry vs InstancedMesh。<br/>
+Three ways to render N cubes: individual Mesh vs merged Geometry vs InstancedMesh.<br/>
+<span style="color:#9fd9ff">切换方法与数量，观察 draw call / 三角形数变化。Orbit to rotate.</span></div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.FogExp2(0x1a1a2e, 0.012);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(30, 25, 40);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ── 灯光 / Lights ────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x404060, 0.6));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+dl.position.set(20, 30, 15);
+scene.add(dl);
+
+// ── 地面 / Ground ────────────────────────────────────────────
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({ color: 0x141422, roughness: 0.9 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -5;
+scene.add(ground);
+
+// ── 共享几何体与材质（复用）/ shared geometry & material ─────
+const sharedGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+const sharedMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.5, metalness: 0.3 });
+
+// ── 对象组 / object group ────────────────────────────────────
+let objectGroup = new THREE.Group();
+scene.add(objectGroup);
+
+// 存储待释放资源 / track resources for disposal
+let disposables = { geometries: [], materials: [], meshes: [] };
+
+function disposeGroup() {
+  objectGroup.traverse(child => {
+    if (child.geometry && child.geometry !== sharedGeo) {
+      child.geometry.dispose();
+    }
+    if (child.material && child.material !== sharedMat) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => m.dispose());
+    }
+  });
+  scene.remove(objectGroup);
+  objectGroup = new THREE.Group();
+  scene.add(objectGroup);
+}
+
+// ── 三种渲染方法 / three render methods ──────────────────────
+function randomPosition(i, count) {
+  // 网格分布 + 随机偏移 / grid distribution + random offset
+  const side = Math.ceil(Math.sqrt(count));
+  const x = (i % side) - side / 2 + (Math.random() - 0.5) * 0.5;
+  const z = Math.floor(i / side) - side / 2 + (Math.random() - 0.5) * 0.5;
+  const y = Math.random() * 4 - 2;
+  return [x * 1.5, y, z * 1.5];
+}
+
+function buildMeshes(count) {
+  disposeGroup();
+  for (let i = 0; i < count; i++) {
+    const mesh = new THREE.Mesh(sharedGeo, sharedMat); // 共享 geo+mat / shared
+    mesh.position.fromArray(randomPosition(i, count));
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    objectGroup.add(mesh);
+  }
+}
+
+function buildMerged(count) {
+  disposeGroup();
+  const geometries = [];
+  for (let i = 0; i < count; i++) {
+    const g = sharedGeo.clone();
+    const [x, y, z] = randomPosition(i, count);
+    g.translate(x, y, z);
+    g.rotateX(Math.random() * Math.PI);
+    g.rotateY(Math.random() * Math.PI);
+    geometries.push(g);
+  }
+  const merged = mergeGeometries(geometries);
+  // 释放临时的 clone / dispose temp clones
+  geometries.forEach(g => g.dispose());
+  const mesh = new THREE.Mesh(merged, sharedMat);
+  objectGroup.add(mesh);
+}
+
+const dummy = new THREE.Object3D();
+function buildInstanced(count) {
+  disposeGroup();
+  const mesh = new THREE.InstancedMesh(sharedGeo, sharedMat, count);
+  for (let i = 0; i < count; i++) {
+    dummy.position.fromArray(randomPosition(i, count));
+    dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  objectGroup.add(mesh);
+}
+
+// ── GUI ─────────────────────────────────────────────────────
+const gui = new GUI();
+const params = {
+  method: 'instanced',  // 'mesh' | 'merged' | 'instanced'
+  count: 1000,
+  rotate: true,
+  rotateSpeed: 0.3,
+};
+const counts = [100, 1000, 10000, 50000];
+
+const methodFolder = gui.addFolder('渲染方法 Method');
+methodFolder.add(params, 'method', { '独立 Mesh': 'mesh', '合并 Merged': 'merged', '实例 Instanced': 'instanced' }).name('方法').onChange(rebuild);
+methodFolder.add(params, 'count', counts).name('数量 Count').onChange(rebuild);
+methodFolder.open();
+gui.add(params, 'rotate').name('自转 Rotate');
+gui.add(params, 'rotateSpeed', 0, 2, 0.01).name('转速 Speed');
+
+function rebuild() {
+  switch (params.method) {
+    case 'mesh':     buildMeshes(params.count); break;
+    case 'merged':   buildMerged(params.count); break;
+    case 'instanced':buildInstanced(params.count); break;
+  }
+}
+rebuild();
+
+// ── 性能面板 / perf panel ────────────────────────────────────
+const perfEl = document.createElement('div');
+perfEl.style.cssText = 'position:absolute;bottom:12px;left:12px;z-index:10;color:#8f8;font-size:12px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.6);padding:8px 12px;border-radius:6px;line-height:1.7;min-width:260px';
+document.body.appendChild(perfEl);
+
+// FPS 计算 / FPS calculation
+let frames = 0, lastTime = performance.now(), fps = 0;
+let frameTime = 0, frameStart = 0;
+
+function updatePerf() {
+  const info = renderer.info;
+  const methodLabel = { mesh: '独立 Mesh', merged: '合并 Merged', instanced: '实例 Instanced' }[params.method];
+  perfEl.innerHTML =
+    `<b style="color:#7fd1ff">${methodLabel}</b> × ${params.count.toLocaleString()}<br/>` +
+    `FPS: <b style="color:${fps >= 50 ? '#8f8' : fps >= 30 ? '#ff8' : '#f88'}">${fps}</b> | Frame: ${frameTime.toFixed(1)}ms<br/>` +
+    `Draw Calls: <b style="color:#ff8">${info.render.calls}</b><br/>` +
+    `Triangles: <b style="color:#ff8">${info.render.triangles.toLocaleString()}</b><br/>` +
+    `Geometries: ${info.memory.geometries} | Programs: ${info.programs?.length || 0}`;
+}
+
+// ── 提示栏 / hint bar ────────────────────────────────────────
+const hintEl = document.createElement('div');
+hintEl.style.cssText = 'position:absolute;bottom:12px;right:12px;z-index:10;color:#9fd9ff;font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;max-width:300px';
+hintEl.innerHTML = 'Mesh: N draw calls<br/>Merged: 1 draw call (无法单独移动)<br/>Instanced: 1 draw call (可单独变换)';
+document.body.appendChild(hintEl);
+
+// ── 渲染循环 / Render loop ───────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  frameStart = performance.now();
+  requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
+  if (params.rotate) {
+    objectGroup.rotation.y = elapsed * params.rotateSpeed;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  // FPS / frame time
+  frameTime = performance.now() - frameStart;
+  frames++;
+  const now = performance.now();
+  if (now - lastTime >= 500) {
+    fps = Math.round((frames * 1000) / (now - lastTime));
+    frames = 0;
+    lastTime = now;
+  }
+  updatePerf();
+}
+animate();
+
+// ── resize ───────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script></body></html>

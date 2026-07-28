@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>材质实验室 / Material Lab</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    #info {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      color: #e0e0e0; background: rgba(0,0,0,0.55); padding: 10px 14px;
+      border-radius: 8px; font-size: 13px; line-height: 1.6; max-width: 400px;
+      pointer-events: none;
+    }
+    #info b { color: #7fd1ff; }
+    #info code { color: #ffd479; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="info">
+    <b>材质实验室 / Material Lab</b><br />
+    同一球体，实时切换材质类型与 PBR 参数。<br />
+    Same sphere with live material-type & PBR switching.<br />
+    调整金属度/粗糙度/曝光/色调映射/光源方向。<br />
+    <code>metalness=1 无环境光 → 全黑</code>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    // ---- 场景 / Scene ----
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111122);
+
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 1.5, 4.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.getElementById('app').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // ---- 程序化环境贴图 / Procedural environment map ----
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    function buildEnvScene() {
+      const env = new THREE.Scene();
+      env.background = new THREE.Color(0x1a1a2a);
+      // 彩色面片做反射 / colored panels for reflections
+      const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff];
+      for (let i = 0; i < 6; i++) {
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(8, 8),
+          new THREE.MeshBasicMaterial({ color: colors[i], side: THREE.DoubleSide })
+        );
+        const a = (i / 6) * Math.PI * 2;
+        m.position.set(Math.cos(a) * 6, 3, Math.sin(a) * 6);
+        m.lookAt(0, 3, 0);
+        env.add(m);
+      }
+      // 地板 / floor
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 20),
+        new THREE.MeshBasicMaterial({ color: 0x333344 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      env.add(floor);
+      return env;
+    }
+    const envRT = pmrem.fromScene(buildEnvScene(), 0.04);
+    scene.environment = envRT.texture;
+
+    // ---- 灯光 / Lights ----
+    scene.add(new THREE.AmbientLight(0x3a3a4a, 0.3));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    dirLight.position.set(4, 6, 3);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 30;
+    dirLight.shadow.camera.left = -5;
+    dirLight.shadow.camera.right = 5;
+    dirLight.shadow.camera.top = 5;
+    dirLight.shadow.camera.bottom = -5;
+    scene.add(dirLight);
+
+    // ---- 地板 / Floor ----
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.9, metalness: 0.1 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -1.2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // ---- 网格辅助 / Grid ----
+    const grid = new THREE.GridHelper(20, 20, 0x334466, 0x223344);
+    grid.position.y = -1.19;
+    scene.add(grid);
+
+    // ====== 材质实验室 / Material Lab ======
+    const sphereGeo = new THREE.SphereGeometry(1, 64, 48);
+    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    sphere.castShadow = true;
+    sphere.receiveShadow = true;
+    scene.add(sphere);
+
+    // 材质工厂 / material factory
+    function createMaterial(type) {
+      const opts = { color: 0xcccccc };
+      switch (type) {
+        case 'Basic':    return new THREE.MeshBasicMaterial(opts);
+        case 'Lambert':  return new THREE.MeshLambertMaterial(opts);
+        case 'Phong':    return new THREE.MeshPhongMaterial({ ...opts, shininess: 80, specular: 0xffffff });
+        case 'Standard': return new THREE.MeshStandardMaterial({ ...opts, metalness: p.metalness, roughness: p.roughness, envMapIntensity: p.envIntensity });
+        case 'Physical': return new THREE.MeshPhysicalMaterial({ ...opts, metalness: p.metalness, roughness: p.roughness, envMapIntensity: p.envIntensity, clearcoat: 0.5, clearcoatRoughness: 0.2 });
+        case 'Normal':   return new THREE.MeshNormalMaterial();
+        default:         return new THREE.MeshStandardMaterial(opts);
+      }
+    }
+
+    // ---- GUI / Debug panel ----
+    const p = {
+      type: 'Standard',
+      metalness: 0.5,
+      roughness: 0.3,
+      envIntensity: 1.0,
+      exposure: 1.0,
+      toneMapping: 'ACESFilmic',
+      lightAngle: 35,
+      emissive: 0,
+    };
+
+    const gui = new GUI();
+    gui.add(p, 'type', ['Basic', 'Lambert', 'Phong', 'Standard', 'Physical', 'Normal'])
+       .name('材质类型 / Type').onChange(applyMaterial);
+    gui.add(p, 'metalness', 0, 1, 0.01).name('金属度 / Metalness').onChange(v => {
+      if (sphere.material.metalness !== undefined) sphere.material.metalness = v;
+    });
+    gui.add(p, 'roughness', 0, 1, 0.01).name('粗糙度 / Roughness').onChange(v => {
+      if (sphere.material.roughness !== undefined) sphere.material.roughness = v;
+    });
+    gui.add(p, 'envIntensity', 0, 3, 0.01).name('环境强度 / Env').onChange(v => {
+      if (sphere.material.envMapIntensity !== undefined) sphere.material.envMapIntensity = v;
+    });
+    gui.add(p, 'emissive', 0, 2, 0.01).name('自发光 / Emissive').onChange(v => {
+      if (sphere.material.emissive) {
+        sphere.material.emissive.setRGB(v, v * 0.3, v * 0.1);
+        sphere.material.emissiveIntensity = v;
+      }
+    });
+    gui.add(p, 'exposure', 0, 3, 0.01).name('曝光 / Exposure').onChange(v => {
+      renderer.toneMappingExposure = v;
+    });
+    gui.add(p, 'toneMapping', ['ACESFilmic', 'Reinhard', 'Cineon', 'Linear', 'Neutral'])
+       .name('色调映射 / ToneMap').onChange(v => {
+         renderer.toneMapping = THREE[v + 'ToneMapping'];
+         applyMaterial(p.type); // 重建材质以更新 shader 中的色调映射 / rebuild to update shader
+       });
+    gui.add(p, 'lightAngle', 0, 360, 1).name('光源角度 / Light°').onChange(v => {
+      const r = THREE.MathUtils.degToRad(v);
+      dirLight.position.set(Math.cos(r) * 6, 5, Math.sin(r) * 6);
+    });
+
+    function applyMaterial(type) {
+      const old = sphere.material;
+      sphere.material = createMaterial(type);
+      // 应用当前 PBR 参数 / apply current PBR params
+      const m = sphere.material;
+      if (m.metalness !== undefined) m.metalness = p.metalness;
+      if (m.roughness !== undefined) m.roughness = p.roughness;
+      if (m.envMapIntensity !== undefined) m.envMapIntensity = p.envIntensity;
+      if (m.emissive) {
+        m.emissive.setRGB(p.emissive, p.emissive * 0.3, p.emissive * 0.1);
+        m.emissiveIntensity = p.emissive;
+      }
+      old.dispose();
+    }
+
+    applyMaterial('Standard');
+
+    // ---- 渲染循环 / Render loop ----
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
