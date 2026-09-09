@@ -1,0 +1,104 @@
+# ============================================================
+# 测试环境配置文件（Spring Boot 2.5.12）
+# ============================================================
+# 激活方式：
+#   - 使用 @ActiveProfiles("test") 注解
+#   - 或 mvn test -Dspring.profiles.active=test
+#
+# 主要变更：
+#   1. 使用 H2 内存数据库替代 MySQL，避免测试依赖外部数据库
+#   2. 关闭 Redis（或使用嵌入式 Redis）
+#   3. 使用独立的 JWT 密钥，与生产环境隔离
+#   4. 开启 SQL 日志输出，方便调试
+#
+# Spring Boot 2.5.x 注意事项：
+#   - Redis 配置前缀是 spring.redis（不是 spring.data.redis）
+#   - sql.init（SQL 初始化）在 2.5.x 中已可用（2.5 起取代 spring.datasource.schema）
+# ============================================================
+
+server:
+  port: 8080
+
+spring:
+  # ---------- 数据源配置（H2 内存数据库）----------
+  datasource:
+    # MODE=MySQL 让 H2 兼容 MySQL 语法
+    # DB_CLOSE_DELAY=-1 确保数据库在连接关闭后不被删除
+    # DATABASE_TO_UPPER=false 保持表名大小写与 MySQL 一致
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # ---------- H2 控制台（可选，用于调试）----------
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  # ---------- SQL 初始化 ----------
+  # Spring Boot 2.5.x 的 SQL 初始化配置前缀为 spring.sql.init
+  sql:
+    init:
+      mode: always
+      # 测试用的建表脚本（放在 src/test/resources/ 下）
+      schema-locations: classpath:schema-test.sql
+
+  # ---------- Redis 配置（Spring Boot 2.5.x 前缀：spring.redis）----------
+  # 测试时建议关闭 Redis 或使用 Mock
+  # 如果确实需要 Redis，可以使用嵌入式 Redis（embedded-redis）
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 1000ms
+
+  # ---------- Jackson 配置 ----------
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+# ---------- MyBatis-Plus 配置 ----------
+mybatis-plus:
+  configuration:
+    # 驼峰命名自动映射（数据库下划线 → Java 驼峰）
+    map-underscore-to-camel-case: true
+    # 打印 SQL 日志（测试时开启，方便调试）
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 主键策略：自增
+      id-type: auto
+      # 逻辑删除配置
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ---------- JWT 配置（测试专用）----------
+jwt:
+  # 测试用的密钥（不要在生产环境使用！）
+  secret: test-secret-key-for-unit-testing-only-please-change-in-production-32chars
+  # Token 过期时间：1 小时（毫秒）
+  expiration: 3600000
+
+# ---------- 文件上传配置 ----------
+spring.servlet.multipart:
+  max-file-size: 10MB
+  max-request-size: 10MB
+
+# ---------- 日志配置 ----------
+logging:
+  level:
+    # 应用代码使用 DEBUG 级别，输出详细信息
+    com.example.blog: DEBUG
+    # MyBatis 使用 TRACE 级别，查看完整 SQL
+    com.example.blog.mapper: TRACE
+    # Spring 框架使用 INFO 级别，减少噪音
+    org.springframework: INFO
+    # Spring Security 使用 DEBUG 级别，方便调试安全配置
+    org.springframework.security: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

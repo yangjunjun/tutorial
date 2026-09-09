@@ -1,0 +1,188 @@
+# ============================================================
+# 博客系统 - 生产环境 Docker Compose 覆盖配置（Spring Boot 2.5.12）
+# ============================================================
+#
+# 使用方式（与基础 docker-compose.yml 配合使用）：
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 与开发环境的主要区别：
+#   1. 使用预构建的镜像（不再本地构建）
+#   2. 关闭数据库和 Redis 的外部端口映射
+#   3. 增加 Nginx 反向代理服务
+#   4. 增加资源限制（CPU/内存）
+#   5. 优化 JVM 参数（JDK 8 语法）
+#   6. 强制 always 重启策略
+#
+# ============================================================
+
+version: '3.8'
+
+services:
+
+  # ==========================================================
+  # 博客应用 - 生产环境覆盖
+  # ==========================================================
+  blog-app:
+    # 生产环境使用预构建的镜像（推送到 Docker Hub 或私有仓库）
+    # 使用 :latest 或指定版本号
+    image: ${DOCKER_REGISTRY:-your-registry}/blog-app:${APP_VERSION:-latest}
+    # 清除基础文件中的 build 配置
+    build: !reset
+    # 强制 always 重启（即使手动停止后也自动重启）
+    restart: always
+    # 生产环境不直接暴露端口到宿主机
+    # 由 Nginx 统一代理访问
+    ports: !reset
+    expose:
+      - "8080"
+    # 生产环境环境变量覆盖
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:mysql://blog-mysql:3306/${MYSQL_DATABASE:-blog}?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER:-blog}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD:-blog123456}
+      # Spring Boot 2.5.x 的 Redis 环境变量前缀是 SPRING_REDIS_*
+      - SPRING_REDIS_HOST=blog-redis
+      - SPRING_REDIS_PORT=6379
+      - SPRING_REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      # 生产环境 JVM 参数（JDK 8 语法，适当调大内存，增加 OOM 诊断配置）
+      - >-
+        JAVA_OPTS=
+        -Xms512m
+        -Xmx1024m
+        -XX:+UseParallelGC
+        -XX:+HeapDumpOnOutOfMemoryError
+        -XX:HeapDumpPath=/app/logs/heapdump.hprof
+        -XX:+ExitOnOutOfMemoryError
+        -Djava.security.egd=file:/dev/./urandom
+    # 资源限制（防止容器占用过多宿主机资源）
+    deploy:
+      resources:
+        limits:
+          # 最大内存 1GB
+          memory: 1G
+          # 最大使用 2 个 CPU 核心
+          cpus: '2'
+        reservations:
+          # 预留内存 512MB
+          memory: 512M
+          # 预留 1 个 CPU 核心
+          cpus: '1'
+
+  # ==========================================================
+  # MySQL - 生产环境覆盖
+  # ==========================================================
+  blog-mysql:
+    restart: always
+    # 生产环境关闭 MySQL 外部端口，只允许内部网络访问
+    ports: !reset
+    expose:
+      - "3306"
+    # 生产环境 MySQL 参数优化
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max-connections=500
+      - --innodb-buffer-pool-size=512M
+      - --innodb-log-file-size=128M
+      - --innodb-flush-log-at-trx-commit=1
+      - --slow-query-log=1
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --long-query-time=2
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+
+  # ==========================================================
+  # Redis - 生产环境覆盖
+  # ==========================================================
+  blog-redis:
+    restart: always
+    # 生产环境关闭 Redis 外部端口
+    ports: !reset
+    expose:
+      - "6379"
+    # 生产环境 Redis 参数优化
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      # 生产环境设置密码（通过环境变量）
+      - --requirepass
+      - "${REDIS_PASSWORD:-your_redis_password}"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  # ==========================================================
+  # Nginx 反向代理（仅生产环境）
+  # ==========================================================
+  blog-nginx:
+    # 使用 Nginx Alpine 镜像（体积小，约 40MB）
+    image: nginx:1.25-alpine
+    container_name: blog-nginx
+    restart: always
+    # 对外暴露 HTTP 和 HTTPS 端口
+    ports:
+      - "80:80"
+      - "443:443"
+    # 配置文件和数据卷
+    volumes:
+      # Nginx 主配置文件
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL 证书目录（如果使用 HTTPS）
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      # Nginx 日志持久化
+      - blog-nginx-logs:/var/log/nginx
+      # 静态资源目录（可选，直接从 Nginx 提供静态文件）
+      # - blog-uploads:/usr/share/nginx/html/uploads:ro
+    networks:
+      - blog-network
+    # 依赖博客应用
+    depends_on:
+      blog-app:
+        condition: service_healthy
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+# ============================================================
+# 生产环境额外的数据卷
+# ============================================================
+volumes:
+  # Nginx 访问日志和错误日志
+  blog-nginx-logs:
+    driver: local

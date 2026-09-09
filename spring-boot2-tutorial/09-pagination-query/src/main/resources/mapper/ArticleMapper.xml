@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//MyBatis//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    MyBatis XML 映射文件 — ArticleMapper
+
+    本文件定义了 ArticleMapper 接口中自定义方法的 SQL 语句。
+    主要用于多表联查场景（文章列表需要展示分类名、作者名）。
+
+    命名空间（namespace）必须与 Mapper 接口的全限定名一致。
+    方法 ID（id）必须与 Mapper 接口中的方法名一致。
+-->
+<mapper namespace="com.example.blog.mapper.ArticleMapper">
+
+    <!--
+        结果映射（ResultMap）
+        将数据库查询结果映射到 ArticleListVO 对象的属性上。
+
+        使用 column 属性指定数据库列名，property 属性指定 Java 对象属性名。
+        当列名和属性名不一致时（如 create_time vs createTime），需要手动映射。
+        当列名和属性名一致时，可以不写映射（MyBatis 会自动驼峰转换）。
+    -->
+    <resultMap id="ArticleListResultMap" type="com.example.blog.vo.ArticleListVO">
+        <!-- 文章 ID -->
+        <id column="id" property="id"/>
+        <!-- 文章标题 -->
+        <result column="title" property="title"/>
+        <!-- 文章摘要 -->
+        <result column="summary" property="summary"/>
+        <!-- 封面图片 -->
+        <result column="cover_image" property="coverImage"/>
+        <!-- 分类 ID -->
+        <result column="category_id" property="categoryId"/>
+        <!-- 分类名称（来自 category 表） -->
+        <result column="category_name" property="categoryName"/>
+        <!-- 作者 ID -->
+        <result column="author_id" property="authorId"/>
+        <!-- 作者昵称（来自 user 表） -->
+        <result column="author_name" property="authorName"/>
+        <!-- 浏览量 -->
+        <result column="view_count" property="viewCount"/>
+        <!-- 点赞数 -->
+        <result column="like_count" property="likeCount"/>
+        <!-- 评论数 -->
+        <result column="comment_count" property="commentCount"/>
+        <!-- 文章状态 -->
+        <result column="status" property="status"/>
+        <!-- 创建时间 -->
+        <result column="create_time" property="createTime"/>
+        <!-- 更新时间 -->
+        <result column="update_time" property="updateTime"/>
+        <!--
+            注意：tags 字段不在此 ResultMap 中映射，
+            因为标签是多对多关系，需要在 Service 层单独查询后填充。
+        -->
+    </resultMap>
+
+    <!--
+        分页查询文章列表（多表联查）
+
+        联查说明：
+        - LEFT JOIN blog_category c：左连接分类表，获取分类名
+          使用 LEFT JOIN 而非 INNER JOIN 是因为文章可能没有分类
+        - LEFT JOIN blog_user u：左连接用户表，获取作者名
+
+        条件说明：
+        - <if> 标签实现动态条件：有值才添加 WHERE 子句
+        - <where> 标签自动处理 AND/OR 前缀
+        - LIKE CONCAT('%', #{keyword}, '%')：模糊搜索，前后加 % 通配符
+
+        排序说明：
+        - 使用 <choose> 标签实现安全的排序字段选择（白名单方式），
+          避免直接使用 ${} 导致的 SQL 注入风险。
+    -->
+    <select id="selectArticlePage" resultMap="ArticleListResultMap">
+        SELECT
+            a.id,
+            a.title,
+            a.summary,
+            a.cover_image,
+            a.category_id,
+            c.name AS category_name,
+            a.author_id,
+            u.nickname AS author_name,
+            a.view_count,
+            a.like_count,
+            a.comment_count,
+            a.status,
+            a.create_time,
+            a.update_time
+        FROM blog_article a
+        LEFT JOIN blog_category c ON a.category_id = c.id
+        LEFT JOIN blog_user u ON a.author_id = u.id
+        <where>
+            <!-- 按分类 ID 筛选 -->
+            <if test="categoryId != null">
+                AND a.category_id = #{categoryId}
+            </if>
+            <!-- 按状态筛选 -->
+            <if test="status != null">
+                AND a.status = #{status}
+            </if>
+            <!-- 按关键词模糊搜索（标题或摘要） -->
+            <if test="keyword != null and keyword != ''">
+                AND (a.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR a.summary LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        <!--
+            动态排序：
+            使用 <choose> 标签实现安全的排序字段选择，
+            避免直接使用 ${} 导致的 SQL 注入风险。
+        -->
+        ORDER BY
+        <choose>
+            <when test="sortBy == 'viewCount'">
+                a.view_count
+            </when>
+            <when test="sortBy == 'likeCount'">
+                a.like_count
+            </when>
+            <when test="sortBy == 'updateTime'">
+                a.update_time
+            </when>
+            <otherwise>
+                a.create_time
+            </otherwise>
+        </choose>
+        <choose>
+            <when test="sortOrder == 'asc'">
+                ASC
+            </when>
+            <otherwise>
+                DESC
+            </otherwise>
+        </choose>
+    </select>
+
+    <!--
+        根据标签 ID 分页查询文章列表
+
+        联查说明：
+        - 需要额外 JOIN article_tag 中间表来筛选标签
+        - 先通过中间表找到文章 ID，再关联文章表、分类表、用户表
+
+        查询流程：
+        blog_article → article_tag（中间表）→ 按 tag_id 筛选
+                     → blog_category（获取分类名）
+                     → blog_user（获取作者名）
+    -->
+    <select id="selectArticlePageByTagId" resultMap="ArticleListResultMap">
+        SELECT
+            a.id,
+            a.title,
+            a.summary,
+            a.cover_image,
+            a.category_id,
+            c.name AS category_name,
+            a.author_id,
+            u.nickname AS author_name,
+            a.view_count,
+            a.like_count,
+            a.comment_count,
+            a.status,
+            a.create_time,
+            a.update_time
+        FROM blog_article a
+        <!-- 关联文章标签中间表 -->
+        INNER JOIN blog_article_tag at ON a.id = at.article_id
+        LEFT JOIN blog_category c ON a.category_id = c.id
+        LEFT JOIN blog_user u ON a.author_id = u.id
+        <where>
+            <!-- 按标签 ID 筛选 -->
+            AND at.tag_id = #{tagId}
+            <!-- 按状态筛选 -->
+            <if test="status != null">
+                AND a.status = #{status}
+            </if>
+        </where>
+        ORDER BY a.create_time DESC
+    </select>
+
+</mapper>

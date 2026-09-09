@@ -1,0 +1,79 @@
+# =====================================================
+# Spring Boot 2.5 博客系统 — application.yml
+# 本章重点：Springfox Swagger 3.0.0 相关配置
+# =====================================================
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: blog-system
+
+  # 数据源配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/blog?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+  # =====================================================
+  # ⚠️ 关键兼容性配置：Spring Boot 2.5.x + Springfox 3.0.0
+  # =====================================================
+  # Spring Boot 2.5.x 与 springfox 3.0.0 存在已知的 NPE 兼容问题
+  # （documentationPluginsBootstrapper 启动失败 / ProviderUtils 报错）。
+  # 显式声明 ant_path_matcher 可以避免 springfox 扫描路径时出现空指针，
+  # 也是升级到 Spring Boot 2.6/2.7 后让 Swagger 继续可用的必备配置。
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+# =====================================================
+# Springfox Swagger 配置
+# =====================================================
+springfox:
+  documentation:
+    # 启用 OpenAPI 3.0 格式文档（/v3/api-docs）
+    open-api:
+      v3: true
+    swagger-v2:
+      enabled: true   # 同时保留 v2/api-docs（兼容旧工具）
+    swagger-ui:
+      enabled: true   # 生产环境建议设为 false
+
+# =====================================================
+# MyBatis-Plus 配置
+# =====================================================
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.blog.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# =====================================================
+# 日志配置
+# =====================================================
+logging:
+  level:
+    com.example.blog: debug
+    # 如果需要调试 springfox 问题，可以开启以下日志
+    # org.springframework.web: debug
+    # springfox: debug
+
+# =====================================================
+# 自定义文件上传配置
+# =====================================================
+file:
+  upload:
+    base-path: /data/blog/uploads
+    url-prefix: /uploads
+    allowed-types: image/jpeg,image/png,image/gif,image/webp,application/pdf
+    max-size: 10485760  # 10MB

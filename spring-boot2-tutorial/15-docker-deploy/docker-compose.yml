@@ -1,0 +1,242 @@
+# ============================================================
+# 博客系统 Docker Compose 编排文件（Spring Boot 2.5.12 / JDK 8）
+# ============================================================
+#
+# 使用方式：
+#   1. 复制 .env.example 为 .env 并填写配置
+#   2. docker compose up -d --build
+#   3. docker compose ps         # 查看状态
+#   4. docker compose logs -f    # 查看日志
+#
+# 包含服务：
+#   - blog-app:    Spring Boot 2.5 博客应用（JDK 8 多阶段构建）
+#   - blog-mysql:  MySQL 8.0 数据库
+#   - blog-redis:  Redis 7 缓存（与 Spring Data Redis 2.5.x 完全兼容）
+#
+# 数据卷：
+#   - blog-mysql-data:  MySQL 数据持久化
+#   - blog-redis-data:  Redis 数据持久化
+#   - blog-uploads:     上传文件持久化
+#   - blog-logs:        应用日志持久化
+#
+# ============================================================
+
+version: '3.8'
+
+# ============================================================
+# 服务定义
+# ============================================================
+services:
+
+  # ==========================================================
+  # Spring Boot 博客应用
+  # ==========================================================
+  blog-app:
+    # 使用当前目录的 Dockerfile 构建
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 构建参数（可选）
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    # 容器名称
+    container_name: blog-app
+    # 重启策略：非手动停止时自动重启
+    restart: unless-stopped
+    # 端口映射：宿主机端口:容器端口
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    # 环境变量配置（通过 .env 文件或环境变量注入）
+    environment:
+      # Spring Boot 激活的 Profile
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      # 数据源配置（注意使用容器名 blog-mysql 作为主机名）
+      - SPRING_DATASOURCE_URL=jdbc:mysql://blog-mysql:3306/${MYSQL_DATABASE:-blog}?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER:-blog}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD:-blog123456}
+      # Redis 配置（使用容器名 blog-redis）
+      # 注意：Spring Boot 2.5.x 的环境变量映射前缀是 SPRING_REDIS_*
+      #       （Spring Boot 3 才改为 SPRING_DATA_REDIS_*）
+      - SPRING_REDIS_HOST=blog-redis
+      - SPRING_REDIS_PORT=6379
+      - SPRING_REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # JWT 配置
+      - JWT_SECRET=${JWT_SECRET:-your-256-bit-secret-key-for-jwt-token-generation}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      # JVM 参数（JDK 8 语法）
+      - JAVA_OPTS=${JAVA_OPTS:--Xms256m -Xmx512m}
+      # 时区设置
+      - TZ=Asia/Shanghai
+    # 数据卷挂载
+    volumes:
+      # 上传文件持久化
+      - blog-uploads:/app/uploads
+      # 应用日志持久化
+      - blog-logs:/app/logs
+    # 网络连接
+    networks:
+      - blog-network
+    # 服务依赖：确保 MySQL 和 Redis 就绪后再启动应用
+    depends_on:
+      blog-mysql:
+        condition: service_healthy
+      blog-redis:
+        condition: service_healthy
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # 启动宽限期（Spring Boot 首次启动可能需要较长时间）
+      start_period: 60s
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ==========================================================
+  # MySQL 8.0 数据库
+  # ==========================================================
+  blog-mysql:
+    # 使用 MySQL 8.0 官方镜像
+    image: mysql:8.0
+    container_name: blog-mysql
+    restart: unless-stopped
+    # 端口映射（生产环境建议关闭外部端口）
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    # 环境变量（MySQL 容器初始化时使用）
+    environment:
+      # root 用户密码
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root123456}
+      # 自动创建的数据库名
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-blog}
+      # 普通用户及密码
+      - MYSQL_USER=${MYSQL_USER:-blog}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-blog123456}
+      # 时区
+      - TZ=Asia/Shanghai
+    # 数据卷
+    volumes:
+      # MySQL 数据持久化（命名卷）
+      - blog-mysql-data:/var/lib/mysql
+      # 初始化脚本（首次启动时自动执行）
+      # 放在 /docker-entrypoint-initdb.d/ 目录下的 .sql 文件会按字母顺序执行
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # MySQL 自定义配置（可选）
+      # - ./mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+    networks:
+      - blog-network
+    # MySQL 启动参数优化
+    # 注意：MySQL 8 默认使用 caching_sha2_password，
+    #   这里显式指定 mysql_native_password 以保证旧 JDBC 驱动兼容性
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max-connections=200
+      - --innodb-buffer-pool-size=256M
+      - --innodb-log-file-size=64M
+      - --innodb-flush-log-at-trx-commit=2
+      - --skip-log-bin
+    # 健康检查：通过 mysqladmin ping 检测 MySQL 是否就绪
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ==========================================================
+  # Redis 7 缓存
+  # ==========================================================
+  blog-redis:
+    # 使用 Redis 7 Alpine 镜像（体积小，约 30MB）
+    # Redis 7 的 RESP2 协议与 Spring Data Redis 2.5.x（Lettuce 6.1）完全兼容
+    image: redis:7-alpine
+    container_name: blog-redis
+    restart: unless-stopped
+    # 端口映射（生产环境建议关闭外部端口）
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    # 数据卷
+    volumes:
+      # Redis 数据持久化
+      - blog-redis-data:/data
+    networks:
+      - blog-network
+    # Redis 配置参数
+    command:
+      - redis-server
+      # 开启 AOF 持久化（比 RDB 更可靠）
+      - --appendonly
+      - "yes"
+      # AOF 刷盘策略：每秒同步一次（兼顾性能和安全）
+      - --appendfsync
+      - everysec
+      # 最大内存限制
+      - --maxmemory
+      - 128mb
+      # 内存淘汰策略：最近最少使用
+      - --maxmemory-policy
+      - allkeys-lru
+      # 关闭危险命令（生产环境安全加固）
+      # - --rename-command
+      # - FLUSHALL ""
+    # 健康检查：通过 redis-cli ping 检测 Redis 是否就绪
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# ============================================================
+# 数据卷定义
+# ============================================================
+# 命名卷由 Docker 管理，独立于容器生命周期
+# 即使容器被删除，数据卷中的数据仍然保留
+volumes:
+  # MySQL 数据文件
+  blog-mysql-data:
+    driver: local
+  # Redis 持久化数据
+  blog-redis-data:
+    driver: local
+  # 用户上传文件（图片、附件等）
+  blog-uploads:
+    driver: local
+  # 应用运行日志
+  blog-logs:
+    driver: local
+
+# ============================================================
+# 网络定义
+# ============================================================
+# 自定义 bridge 网络，提供：
+#   1. 容器间 DNS 解析（通过服务名称互相访问）
+#   2. 网络隔离（与其他 Docker 项目隔离）
+#   3. 固定的子网配置（避免 IP 冲突）
+networks:
+  blog-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1

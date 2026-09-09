@@ -1,0 +1,46 @@
+# ============================================
+# 开发环境配置（application-dev.yml）
+# ============================================
+# 仅当 spring.profiles.active=dev 时生效
+# 存放开发环境特有的配置（数据库、日志级别等）
+# ============================================
+
+spring:
+  # 数据源配置（开发环境使用本地 MySQL）
+  # 第 03 章集成 MyBatis-Plus 时会使用此配置
+  datasource:
+    # MySQL 连接 URL
+    # 参数说明：
+    #   useUnicode=true           - 使用 Unicode 字符集
+    #   characterEncoding=utf-8   - 字符编码为 UTF-8
+    #   serverTimezone=Asia/Shanghai - 服务器时区为中国标准时间
+    #   allowPublicKeyRetrieval=true - 允许获取公钥（MySQL 8 认证需要）
+    #   useSSL=false              - 开发环境关闭 SSL（生产环境建议开启）
+    url: jdbc:mysql://localhost:3306/blog_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    # 数据库用户名
+    username: root
+    # 数据库密码（请根据实际情况修改）
+    password: root123456
+    # MySQL JDBC 驱动类名
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# ============================================
+# 开发环境服务器配置
+# ============================================
+server:
+  # 开发环境端口（可根据个人习惯修改）
+  port: 8080
+
+# ============================================
+# 开发环境日志配置
+# ============================================
+# 开发环境开启更详细的日志，便于调试
+logging:
+  level:
+    # 项目包的日志级别设为 debug，可以看到 SQL 语句等详细信息
+    com.example.blog: debug
+    # Spring Web 层日志设为 info，避免过多日志干扰
+    org.springframework.web: info
+    # MyBatis 日志设为 debug，可以看到执行的 SQL 语句和参数
+    # 第 03 章集成 MyBatis-Plus 后生效
+    com.example.blog.mapper: debug

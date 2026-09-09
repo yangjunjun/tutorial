@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Spring Boot 父工程
+        作用：
+        1. 统一管理所有 Spring Boot 官方依赖的版本号（依赖管理 BOM）
+        2. 提供默认的 Maven 插件配置（编译、打包、测试等）
+        3. 提供合理的默认属性（如 Java 版本、编码等）
+        使用 parent 后，我们引入 spring-boot-starter-* 时不需要指定版本号
+
+        版本说明：本教程采用 Spring Boot 2.5.12（2.x 系列的最后一个维护版本，
+        基于 Java 8 + javax.* 生态），它是 2.5.x 分支的最终修复版。
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.5.12</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <!-- ============================================ -->
+    <!-- 项目坐标（GAV）                              -->
+    <!-- ============================================ -->
+    <groupId>com.example</groupId>
+    <artifactId>blog-api</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>blog-api</name>
+    <description>Personal Blog System API - Spring Boot 2.5 Tutorial</description>
+
+    <!-- ============================================ -->
+    <!-- 项目属性                                      -->
+    <!-- ============================================ -->
+    <properties>
+        <!--
+            Java 编译版本
+            Spring Boot 2.x 兼容 JDK 8 及以上版本（也支持 11/17），
+            本教程统一使用 JDK 8，这是国内企业存量项目中最主流的版本
+        -->
+        <java.version>1.8</java.version>
+    </properties>
+
+    <!-- ============================================ -->
+    <!-- 依赖列表                                      -->
+    <!-- ============================================ -->
+    <dependencies>
+
+        <!--
+            Spring Web Starter
+            包含：
+            - Spring MVC 框架（DispatcherServlet、注解驱动等）
+            - 内嵌 Tomcat Web 服务器（无需单独安装）
+            - Jackson（JSON 序列化/反序列化）
+            - Spring 核心容器（IoC、AOP 等）
+            引入此 Starter 后即可开发 RESTful API
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+            Lombok
+            通过注解在编译期自动生成：
+            - getter / setter 方法（@Getter, @Setter, @Data）
+            - 构造器（@NoArgsConstructor, @AllArgsConstructor）
+            - toString / equals / hashCode（@Data, @EqualsAndHashCode）
+            - Builder 模式（@Builder）
+            - 日志对象（@Slf4j）
+            标记为 optional=true：不会传递给依赖本项目的其他模块
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Spring Boot Test Starter
+            包含：
+            - JUnit 5（测试框架）
+            - Mockito（Mock 框架）
+            - AssertJ（流式断言）
+            - Spring Test（集成测试支持）
+            scope=test 表示仅在测试时使用，不会打入最终的生产 JAR
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================ -->
+    <!-- 构建配置                                      -->
+    <!-- ============================================ -->
+    <build>
+        <plugins>
+            <!--
+                Spring Boot Maven 插件
+                功能：
+                1. mvn spring-boot:run - 直接在命令行启动应用
+                2. mvn package - 打包为可执行的 "Fat JAR"（包含所有依赖）
+                3. 提供 Actuator 端点（如启用）
+                excludes 中排除了 Lombok，因为 Lombok 只在编译期使用，
+                运行时不需要，排除后可以减小最终 JAR 的体积
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

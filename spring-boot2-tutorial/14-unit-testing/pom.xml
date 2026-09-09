@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ==================== 父项目 ==================== -->
+    <!--
+        Spring Boot 2.5.12 父 POM
+        统一管理依赖版本：
+        - spring-boot-starter-test -> JUnit 5.7.x + Mockito 3.9.x + AssertJ 3.19.x
+        - h2 -> H2 1.4.200
+        - spring-security-test -> Spring Security 5.5.x（与 2.5.12 匹配）
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.5.12</version>
+        <relativePath/>
+    </parent>
+
+    <!-- ==================== 项目信息 ==================== -->
+    <groupId>com.example</groupId>
+    <artifactId>blog-system</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>个人博客系统</name>
+    <description>Spring Boot 2.5 个人博客系统 - 第 14 章测试示例</description>
+
+    <!-- ==================== 版本属性 ==================== -->
+    <properties>
+        <!-- JDK 8：本教程统一使用 Java 8 语法 -->
+        <java.version>1.8</java.version>
+        <!-- MyBatis-Plus：Spring Boot 2.x 使用 mybatis-plus-boot-starter -->
+        <mybatis-plus.version>3.5.1</mybatis-plus.version>
+        <!-- JWT：Spring Boot 2 世代常用 0.9.1（jjwt 0.11+ API 变化较大且需 JDK 8 兼容坐标） -->
+        <jjwt.version>0.9.1</jjwt.version>
+        <hutool.version>5.8.11</hutool.version>
+        <!-- JaCoCo：0.8.x 系列才支持较新的 JDK 字节码版本 -->
+        <jacoco.version>0.8.7</jacoco.version>
+    </properties>
+
+    <!-- ==================== 依赖管理 ==================== -->
+    <dependencies>
+
+        <!-- ==================== Spring Boot 核心依赖 ==================== -->
+
+        <!-- Spring Boot Web：提供 RESTful 支持 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Security：安全认证框架（2.5.12 对应 Spring Security 5.5.x） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Validation：参数校验（javax.validation 世代） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Redis：缓存和会话管理（默认 Lettuce 客户端） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Spring Boot AOP：切面编程（日志、权限等） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- ==================== 数据库相关依赖 ==================== -->
+
+        <!--
+            MyBatis-Plus：ORM 框架
+            重要：Spring Boot 2.x 必须使用 mybatis-plus-boot-starter
+            （mybatis-plus-spring-boot3-starter 基于 jakarta.*，仅适用于 Spring Boot 3）
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
+        <!-- MySQL 驱动 -->
+        <!-- Spring Boot 2.5.12 管理的坐标是旧坐标 mysql:mysql-connector-java（8.0.x） -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Druid 连接池 -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-starter</artifactId>
+            <version>1.2.8</version>
+        </dependency>
+
+        <!-- ==================== JWT 依赖 ==================== -->
+        <!--
+            jjwt 0.9.1：Spring Boot 2 世代最常用的 JWT 库，
+            只需一个依赖即可同时获得 API 与实现（0.11+/0.12+ 拆分为三个包）
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+
+        <!-- JDK 8 下使用 jjwt 需要 JAXB 相关依赖（Java EE 已内置，JDK 8 无需额外引入；
+             若升级到 JDK 11+ 运行，需补充 javax.xml.bind:jaxb-api 等依赖） -->
+
+        <!-- ==================== 工具类依赖 ==================== -->
+
+        <!-- Hutool 工具集 -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+
+        <!-- Lombok：简化代码（@Data, @Builder 等） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ==================== 测试依赖 ==================== -->
+
+        <!--
+            spring-boot-starter-test：Spring Boot 官方测试启动器
+            Spring Boot 2.5.12 管理的版本：
+            - JUnit Jupiter 5.7.2
+            - Mockito 3.9.0（mockito-core / mockito-junit-jupiter）
+            - AssertJ 3.19.0
+            - Hamcrest 2.2
+            - JSONassert 1.5.0
+            - JsonPath 2.5.0
+            - MockMvc（spring-test 提供）
+            scope=test 表示仅在测试时使用，不会打入最终 JAR
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Spring Security Test：提供 Security 相关的测试支持
+            包含：@WithMockUser, SecurityMockMvcRequestPostProcessors 等
+            版本由 Spring Boot 2.5.12 父 POM 管理（5.5.x）
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            H2 内存数据库：用于集成测试
+            替代真实的 MySQL，避免测试依赖外部数据库
+            MODE=MySQL 参数可让 H2 兼容 MySQL 语法
+            注意：2.5.12 管理的是 H2 1.4.200，JDBC URL 兼容本测试配置
+        -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ==================== 构建配置 ==================== -->
+    <build>
+        <plugins>
+
+            <!-- Spring Boot Maven 插件：用于打包可执行 JAR -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Surefire 插件：配置测试执行行为 -->
+            <!-- 2.5.12 父 POM 管理的 Surefire 2.22.2 原生支持 JUnit 5 平台 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 测试失败时不中断构建（CI/CD 中可设为 true） -->
+                    <testFailureIgnore>false</testFailureIgnore>
+                    <!-- 包含的测试类模式 -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                    </includes>
+                    <!-- 排除的测试类模式 -->
+                    <excludes>
+                        <exclude>**/*IntegrationTest.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!--
+                JaCoCo 插件：测试覆盖率分析
+                运行 mvn test 后，自动生成覆盖率报告
+                报告位置：target/site/jacoco/index.html
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <!-- 准备 Agent：在测试执行前注入 JaCoCo Agent -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <!-- 生成报告：在 test 阶段后生成覆盖率报告 -->
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 报告输出目录 -->
+                            <outputDirectory>${project.build.directory}/site/jacoco</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <!-- 覆盖率检查：可选，设置最低覆盖率要求 -->
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <!-- 行覆盖率最低 60% -->
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <!-- 分支覆盖率最低 50% -->
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.50</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

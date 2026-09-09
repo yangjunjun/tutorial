@@ -1,0 +1,72 @@
+# ============================================
+# Spring Boot 主配置文件（application.yml）
+# ============================================
+# 存放所有环境共享的公共配置
+# 环境特定配置请放到 application-{profile}.yml 中
+# ============================================
+
+spring:
+  # 应用名称
+  # - 会在启动日志中显示
+  # - 在微服务架构中用于服务注册与发现
+  application:
+    name: blog-api
+
+  # 激活的环境配置（Profile）
+  # 指定后，Spring Boot 会额外加载 application-{profile}.yml
+  # 例如 active: dev 会加载 application-dev.yml
+  #
+  # 切换环境的方式（优先级从高到低）：
+  #   1. 命令行参数：--spring.profiles.active=prod
+  #   2. JVM 参数：-Dspring.profiles.active=prod
+  #   3. 环境变量：SPRING_PROFILES_ACTIVE=prod
+  #   4. 本配置文件（优先级最低）
+  profiles:
+    active: dev
+
+  # Jackson 全局日期格式化配置
+  jackson:
+    # 日期时间格式（中国标准时间）
+    date-format: yyyy-MM-dd HH:mm:ss
+    # 时区设置
+    time-zone: Asia/Shanghai
+    # LocalDateTime 序列化格式
+    serialization:
+      write-dates-as-timestamps: false
+
+# ============================================
+# 服务器配置
+# ============================================
+server:
+  # 应用监听端口（各环境可在 profile 配置中覆盖）
+  port: 8080
+
+  # Tomcat 配置
+  tomcat:
+    # 最大工作线程数
+    max-threads: 200
+    # 最小空闲线程数
+    min-spare-threads: 10
+    # 最大连接数
+    max-connections: 10000
+
+# ============================================
+# 文件上传配置
+# ============================================
+  servlet:
+    multipart:
+      # 单个文件最大大小
+      max-file-size: 10MB
+      # 整个请求的最大大小
+      max-request-size: 50MB
+
+# ============================================
+# 日志配置
+# ============================================
+logging:
+  # 日志格式
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  # 默认日志级别
+  level:
+    root: info
